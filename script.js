@@ -44,7 +44,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 isDragging = true;
                 activeTextBox = this;
                 const boxRect = this.getBoundingClientRect();
-                const containerRect = canvasContainer.getBoundingClientRect();
                 dragOffsetX = e.clientX - boxRect.left;
                 dragOffsetY = e.clientY - boxRect.top;
             }
