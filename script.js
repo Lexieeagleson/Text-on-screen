@@ -51,7 +51,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Create drag handle
         const dragHandle = document.createElement('button');
         dragHandle.className = 'drag-handle';
-        dragHandle.innerHTML = '&#9776;'; // Hamburger icon (≡) as drag handle
+        dragHandle.innerHTML = '&#9776;'; // Trigram symbol (☰) used as drag handle icon
         dragHandle.title = 'Drag to move';
         dragHandle.setAttribute('aria-label', 'Drag handle - click and drag to move text box');
 
@@ -75,11 +75,8 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
-        // Drag handle - mouse events
-        dragHandle.addEventListener('mousedown', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            
+        // Helper function to start drag operation from drag handle
+        function startDragFromHandle(clientX, clientY) {
             // Deselect any other text box
             if (selectedTextBox && selectedTextBox !== textBox) {
                 const oldContainer = selectedTextBox.closest('.text-box-container');
@@ -94,32 +91,23 @@ document.addEventListener('DOMContentLoaded', function() {
             selectedTextBox = textBox;
             container.classList.add('selected');
             const boxRect = container.getBoundingClientRect();
-            dragOffsetX = e.clientX - boxRect.left;
-            dragOffsetY = e.clientY - boxRect.top;
+            dragOffsetX = clientX - boxRect.left;
+            dragOffsetY = clientY - boxRect.top;
+        }
+
+        // Drag handle - mouse events
+        dragHandle.addEventListener('mousedown', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            startDragFromHandle(e.clientX, e.clientY);
         });
 
         // Drag handle - touch events for mobile support
         dragHandle.addEventListener('touchstart', function(e) {
             e.preventDefault();
             e.stopPropagation();
-            
-            // Deselect any other text box
-            if (selectedTextBox && selectedTextBox !== textBox) {
-                const oldContainer = selectedTextBox.closest('.text-box-container');
-                if (oldContainer) {
-                    oldContainer.classList.remove('selected');
-                }
-                selectedTextBox.blur();
-            }
-            
-            isDragging = true;
-            activeTextBox = textBox;
-            selectedTextBox = textBox;
-            container.classList.add('selected');
-            const boxRect = container.getBoundingClientRect();
             const touch = e.touches[0];
-            dragOffsetX = touch.clientX - boxRect.left;
-            dragOffsetY = touch.clientY - boxRect.top;
+            startDragFromHandle(touch.clientX, touch.clientY);
         });
 
         // Auto-resize textarea as content changes
