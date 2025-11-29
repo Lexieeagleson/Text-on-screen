@@ -98,6 +98,119 @@ body {
     display: flex;
 }
 
+/* Resize handles */
+.resize-handle {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    background-color: #007bff;
+    border: 1px solid #fff;
+    border-radius: 2px;
+    display: none;
+    z-index: 10;
+}
+
+.text-box-container.selected .resize-handle,
+.text-box-container:hover .resize-handle {
+    display: block;
+}
+
+.resize-handle.se {
+    bottom: -5px;
+    right: -5px;
+    cursor: se-resize;
+}
+
+.resize-handle.sw {
+    bottom: -5px;
+    left: 18px;
+    cursor: sw-resize;
+}
+
+.resize-handle.ne {
+    top: -5px;
+    right: -5px;
+    cursor: ne-resize;
+}
+
+.resize-handle.nw {
+    top: -5px;
+    left: 18px;
+    cursor: nw-resize;
+}
+
+.resize-handle.e {
+    top: 50%;
+    right: -5px;
+    transform: translateY(-50%);
+    cursor: e-resize;
+}
+
+.resize-handle.w {
+    top: 50%;
+    left: 18px;
+    transform: translateY(-50%);
+    cursor: w-resize;
+}
+
+.resize-handle.n {
+    top: -5px;
+    left: 50%;
+    transform: translateX(-50%);
+    cursor: n-resize;
+}
+
+.resize-handle.s {
+    bottom: -5px;
+    left: 50%;
+    transform: translateX(-50%);
+    cursor: s-resize;
+}
+
+/* Dimension input controls */
+.dimension-controls {
+    position: absolute;
+    bottom: -30px;
+    left: 0;
+    display: none;
+    gap: 5px;
+    align-items: center;
+    background-color: rgba(255, 255, 255, 0.95);
+    padding: 3px 6px;
+    border-radius: 4px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    font-size: 11px;
+    z-index: 20;
+    white-space: nowrap;
+}
+
+.text-box-container.selected .dimension-controls {
+    display: flex;
+}
+
+.dimension-controls label {
+    color: #333;
+    font-weight: 500;
+}
+
+.dimension-controls input {
+    width: 45px;
+    padding: 2px 4px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    font-size: 11px;
+    text-align: center;
+}
+
+.dimension-controls input:focus {
+    outline: none;
+    border-color: #007bff;
+}
+
+.dimension-controls span {
+    color: #666;
+}
+
 .text-box {
     position: relative;
     min-width: 50px;
@@ -188,6 +301,14 @@ body {
     }
 
     .drag-handle {
+        display: none !important;
+    }
+
+    .resize-handle {
+        display: none !important;
+    }
+
+    .dimension-controls {
         display: none !important;
     }
 

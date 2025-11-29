@@ -7,16 +7,28 @@ document.addEventListener('DOMContentLoaded', function() {
     let activeTextBox = null;
     let selectedTextBox = null;
     let isDragging = false;
+    let isResizing = false;
+    let resizeDirection = null;
     let dragOffsetX = 0;
     let dragOffsetY = 0;
+    let resizeStartX = 0;
+    let resizeStartY = 0;
+    let resizeStartWidth = 0;
+    let resizeStartHeight = 0;
+    let resizeStartLeft = 0;
+    let resizeStartTop = 0;
+    let activeResizeContainer = null;
 
     // Click on canvas to create a new text box or deselect
     canvasContainer.addEventListener('click', function(e) {
-        // Ignore clicks on existing text boxes, containers (for clicks in padding area), delete buttons, or drag handles
+        // Ignore clicks on existing text boxes, containers (for clicks in padding area), delete buttons, drag handles, or resize handles
         if (e.target.classList.contains('text-box') || 
             e.target.classList.contains('text-box-container') ||
             e.target.classList.contains('delete-btn') ||
-            e.target.classList.contains('drag-handle')) {
+            e.target.classList.contains('drag-handle') ||
+            e.target.classList.contains('resize-handle') ||
+            e.target.classList.contains('dimension-controls') ||
+            e.target.closest('.dimension-controls')) {
             return;
         }
 
@@ -60,6 +72,99 @@ document.addEventListener('DOMContentLoaded', function() {
         deleteBtn.className = 'delete-btn';
         deleteBtn.innerHTML = '&times;';
         deleteBtn.title = 'Delete text box';
+
+        // Create resize handles
+        const resizeDirections = ['se', 'sw', 'ne', 'nw', 'e', 'w', 'n', 's'];
+        resizeDirections.forEach(function(dir) {
+            const handle = document.createElement('div');
+            handle.className = 'resize-handle ' + dir;
+            handle.dataset.direction = dir;
+            handle.title = 'Drag to resize';
+            
+            // Mouse events for resize
+            handle.addEventListener('mousedown', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                startResize(e.clientX, e.clientY, dir, container, textBox);
+            });
+            
+            // Touch events for resize
+            handle.addEventListener('touchstart', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                const touch = e.touches[0];
+                startResize(touch.clientX, touch.clientY, dir, container, textBox);
+            });
+            
+            container.appendChild(handle);
+        });
+
+        // Create dimension controls
+        const dimensionControls = document.createElement('div');
+        dimensionControls.className = 'dimension-controls';
+        
+        const widthLabel = document.createElement('label');
+        widthLabel.textContent = 'W:';
+        const widthInput = document.createElement('input');
+        widthInput.type = 'number';
+        widthInput.min = '50';
+        widthInput.max = '1000';
+        widthInput.value = '100';
+        widthInput.title = 'Width in pixels';
+        widthInput.setAttribute('aria-label', 'Text box width');
+        
+        const separator = document.createElement('span');
+        separator.textContent = '×';
+        
+        const heightLabel = document.createElement('label');
+        heightLabel.textContent = 'H:';
+        const heightInput = document.createElement('input');
+        heightInput.type = 'number';
+        heightInput.min = '24';
+        heightInput.max = '1000';
+        heightInput.value = '24';
+        heightInput.title = 'Height in pixels';
+        heightInput.setAttribute('aria-label', 'Text box height');
+        
+        dimensionControls.appendChild(widthLabel);
+        dimensionControls.appendChild(widthInput);
+        dimensionControls.appendChild(separator);
+        dimensionControls.appendChild(heightLabel);
+        dimensionControls.appendChild(heightInput);
+
+        // Handle dimension input changes
+        widthInput.addEventListener('input', function(e) {
+            e.stopPropagation();
+            const newWidth = Math.max(50, Math.min(1000, parseInt(this.value) || 50));
+            textBox.style.width = newWidth + 'px';
+        });
+        
+        widthInput.addEventListener('change', function() {
+            const newWidth = Math.max(50, Math.min(1000, parseInt(this.value) || 50));
+            this.value = newWidth;
+            textBox.style.width = newWidth + 'px';
+        });
+        
+        heightInput.addEventListener('input', function(e) {
+            e.stopPropagation();
+            const newHeight = Math.max(24, Math.min(1000, parseInt(this.value) || 24));
+            textBox.style.height = newHeight + 'px';
+        });
+        
+        heightInput.addEventListener('change', function() {
+            const newHeight = Math.max(24, Math.min(1000, parseInt(this.value) || 24));
+            this.value = newHeight;
+            textBox.style.height = newHeight + 'px';
+        });
+
+        // Prevent clicks on dimension controls from propagating
+        dimensionControls.addEventListener('click', function(e) {
+            e.stopPropagation();
+        });
+        
+        dimensionControls.addEventListener('mousedown', function(e) {
+            e.stopPropagation();
+        });
 
         // Delete button click handler
         deleteBtn.addEventListener('click', function(e) {
@@ -110,10 +215,15 @@ document.addEventListener('DOMContentLoaded', function() {
             startDragFromHandle(touch.clientX, touch.clientY);
         });
 
-        // Auto-resize textarea as content changes
+        // Auto-resize textarea as content changes (only if not manually sized)
         textBox.addEventListener('input', function() {
-            this.style.height = 'auto';
-            this.style.height = this.scrollHeight + 'px';
+            // Only auto-resize height if no explicit height is set or using auto
+            if (!this.style.height || this.style.height === 'auto') {
+                this.style.height = 'auto';
+                this.style.height = this.scrollHeight + 'px';
+            }
+            // Update dimension inputs
+            updateDimensionInputs(container);
         });
 
         // Handle drag start - can drag when selected (not editing)
@@ -143,7 +253,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Single click to select for moving
         textBox.addEventListener('click', function(e) {
             e.stopPropagation();
-            if (!isDragging) {
+            if (!isDragging && !isResizing) {
                 // Select but don't focus (for moving)
                 if (selectedTextBox && selectedTextBox !== this) {
                     const oldContainer = selectedTextBox.closest('.text-box-container');
@@ -154,6 +264,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 selectedTextBox = this;
                 container.classList.add('selected');
+                updateDimensionInputs(container);
             }
         });
 
@@ -168,14 +279,60 @@ document.addEventListener('DOMContentLoaded', function() {
         container.appendChild(dragHandle);
         container.appendChild(textBox);
         container.appendChild(deleteBtn);
+        container.appendChild(dimensionControls);
         textLayer.appendChild(container);
         textBox.focus();
         selectedTextBox = textBox;
+        
+        // Initialize dimension inputs after textbox is in the DOM
+        setTimeout(function() {
+            updateDimensionInputs(container);
+        }, 0);
+    }
+
+    // Start resize operation
+    function startResize(clientX, clientY, direction, container, textBox) {
+        isResizing = true;
+        resizeDirection = direction;
+        activeResizeContainer = container;
+        activeTextBox = textBox;
+        
+        resizeStartX = clientX;
+        resizeStartY = clientY;
+        resizeStartWidth = textBox.offsetWidth;
+        resizeStartHeight = textBox.offsetHeight;
+        resizeStartLeft = parseFloat(container.style.left) || 0;
+        resizeStartTop = parseFloat(container.style.top) || 0;
+        
+        // Select this text box
+        if (selectedTextBox && selectedTextBox !== textBox) {
+            const oldContainer = selectedTextBox.closest('.text-box-container');
+            if (oldContainer) {
+                oldContainer.classList.remove('selected');
+            }
+            selectedTextBox.blur();
+        }
+        selectedTextBox = textBox;
+        container.classList.add('selected');
+    }
+
+    // Update dimension inputs based on current text box size
+    function updateDimensionInputs(container) {
+        const textBox = container.querySelector('.text-box');
+        const widthInput = container.querySelector('.dimension-controls input[aria-label="Text box width"]');
+        const heightInput = container.querySelector('.dimension-controls input[aria-label="Text box height"]');
+        
+        if (textBox && widthInput && heightInput) {
+            widthInput.value = Math.round(textBox.offsetWidth);
+            heightInput.value = Math.round(textBox.offsetHeight);
+        }
     }
 
     // Handle drag movement
     document.addEventListener('mousemove', function(e) {
-        if (isDragging && activeTextBox) {
+        if (isResizing && activeResizeContainer && activeTextBox) {
+            handleResize(e.clientX, e.clientY);
+        } else if (isDragging && activeTextBox) {
             const container = activeTextBox.closest('.text-box-container');
             if (!container) {
                 console.warn('Text box container not found during drag operation');
@@ -197,7 +354,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Handle touch move for mobile drag support
     document.addEventListener('touchmove', function(e) {
-        if (isDragging && activeTextBox) {
+        if (isResizing && activeResizeContainer && activeTextBox) {
+            const touch = e.touches[0];
+            handleResize(touch.clientX, touch.clientY);
+        } else if (isDragging && activeTextBox) {
             const container = activeTextBox.closest('.text-box-container');
             if (!container) {
                 console.warn('Text box container not found during drag operation');
@@ -218,10 +378,89 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }, { passive: false });
 
+    // Handle resize operation
+    function handleResize(clientX, clientY) {
+        const deltaX = clientX - resizeStartX;
+        const deltaY = clientY - resizeStartY;
+        
+        let newWidth = resizeStartWidth;
+        let newHeight = resizeStartHeight;
+        let newLeft = resizeStartLeft;
+        let newTop = resizeStartTop;
+        
+        const minWidth = 50;
+        const minHeight = 24;
+        
+        // Calculate new dimensions based on resize direction
+        switch (resizeDirection) {
+            case 'se': // Southeast - resize right and bottom
+                newWidth = Math.max(minWidth, resizeStartWidth + deltaX);
+                newHeight = Math.max(minHeight, resizeStartHeight + deltaY);
+                break;
+            case 'sw': // Southwest - resize left and bottom
+                newWidth = Math.max(minWidth, resizeStartWidth - deltaX);
+                newHeight = Math.max(minHeight, resizeStartHeight + deltaY);
+                if (newWidth !== minWidth) {
+                    newLeft = resizeStartLeft + deltaX;
+                }
+                break;
+            case 'ne': // Northeast - resize right and top
+                newWidth = Math.max(minWidth, resizeStartWidth + deltaX);
+                newHeight = Math.max(minHeight, resizeStartHeight - deltaY);
+                if (newHeight !== minHeight) {
+                    newTop = resizeStartTop + deltaY;
+                }
+                break;
+            case 'nw': // Northwest - resize left and top
+                newWidth = Math.max(minWidth, resizeStartWidth - deltaX);
+                newHeight = Math.max(minHeight, resizeStartHeight - deltaY);
+                if (newWidth !== minWidth) {
+                    newLeft = resizeStartLeft + deltaX;
+                }
+                if (newHeight !== minHeight) {
+                    newTop = resizeStartTop + deltaY;
+                }
+                break;
+            case 'e': // East - resize right
+                newWidth = Math.max(minWidth, resizeStartWidth + deltaX);
+                break;
+            case 'w': // West - resize left
+                newWidth = Math.max(minWidth, resizeStartWidth - deltaX);
+                if (newWidth !== minWidth) {
+                    newLeft = resizeStartLeft + deltaX;
+                }
+                break;
+            case 'n': // North - resize top
+                newHeight = Math.max(minHeight, resizeStartHeight - deltaY);
+                if (newHeight !== minHeight) {
+                    newTop = resizeStartTop + deltaY;
+                }
+                break;
+            case 's': // South - resize bottom
+                newHeight = Math.max(minHeight, resizeStartHeight + deltaY);
+                break;
+        }
+        
+        // Apply new dimensions
+        activeTextBox.style.width = newWidth + 'px';
+        activeTextBox.style.height = newHeight + 'px';
+        activeResizeContainer.style.left = newLeft + 'px';
+        activeResizeContainer.style.top = newTop + 'px';
+        
+        // Update dimension inputs
+        updateDimensionInputs(activeResizeContainer);
+    }
+
     // Handle drag end
     document.addEventListener('mouseup', function() {
         if (isDragging) {
             isDragging = false;
+            activeTextBox = null;
+        }
+        if (isResizing) {
+            isResizing = false;
+            resizeDirection = null;
+            activeResizeContainer = null;
             activeTextBox = null;
         }
     });
@@ -230,6 +469,12 @@ document.addEventListener('DOMContentLoaded', function() {
     document.addEventListener('touchend', function() {
         if (isDragging) {
             isDragging = false;
+            activeTextBox = null;
+        }
+        if (isResizing) {
+            isResizing = false;
+            resizeDirection = null;
+            activeResizeContainer = null;
             activeTextBox = null;
         }
     });
@@ -248,12 +493,15 @@ document.addEventListener('DOMContentLoaded', function() {
         textBoxContainers.forEach(function(container) {
             const left = parseFloat(container.style.left) || 0;
             const top = parseFloat(container.style.top) || 0;
+            const textBox = container.querySelector('.text-box');
             
-            // Store original values
+            // Store original values including size
             originalStyles.push({
                 container: container,
                 left: container.style.left,
-                top: container.style.top
+                top: container.style.top,
+                width: textBox ? textBox.style.width : null,
+                height: textBox ? textBox.style.height : null
             });
 
             // Convert to percentage-based positioning for print
@@ -262,6 +510,16 @@ document.addEventListener('DOMContentLoaded', function() {
             
             container.style.left = leftPercent + '%';
             container.style.top = topPercent + '%';
+            
+            // Convert text box dimensions to percentage-based for print
+            if (textBox) {
+                const textBoxWidth = textBox.offsetWidth;
+                const textBoxHeight = textBox.offsetHeight;
+                const widthPercent = (textBoxWidth / canvasWidth) * 100;
+                const heightPercent = (textBoxHeight / canvasHeight) * 100;
+                textBox.style.width = widthPercent + '%';
+                textBox.style.height = heightPercent + '%';
+            }
         });
 
         // Restore original pixel-based positions after print dialog closes
@@ -269,6 +527,11 @@ document.addEventListener('DOMContentLoaded', function() {
             originalStyles.forEach(function(item) {
                 item.container.style.left = item.left;
                 item.container.style.top = item.top;
+                const textBox = item.container.querySelector('.text-box');
+                if (textBox) {
+                    textBox.style.width = item.width;
+                    textBox.style.height = item.height;
+                }
             });
             window.removeEventListener('afterprint', restorePositions);
         }
