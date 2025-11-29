@@ -484,7 +484,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // Convert text box width to percentage-based for print (height auto-adjusts)
             if (textBox) {
                 const textBoxWidth = textBox.offsetWidth;
-                const widthPercent = (textBoxWidth / canvasWidth) * 100;
+                const widthPercent = (textBoxWidth / imageBounds.width) * 100;
                 textBox.style.width = widthPercent + '%';
             }
         });
