@@ -73,8 +73,8 @@ document.addEventListener('DOMContentLoaded', function() {
         deleteBtn.innerHTML = '&times;';
         deleteBtn.title = 'Delete text box';
 
-        // Create resize handles
-        const resizeDirections = ['se', 'sw', 'ne', 'nw', 'e', 'w', 'n', 's'];
+        // Create resize handles (only east and west for width adjustment)
+        const resizeDirections = ['e', 'w'];
         resizeDirections.forEach(function(dir) {
             const handle = document.createElement('div');
             handle.className = 'resize-handle ' + dir;
@@ -99,7 +99,7 @@ document.addEventListener('DOMContentLoaded', function() {
             container.appendChild(handle);
         });
 
-        // Create dimension controls
+        // Create dimension controls (width only - height auto-adjusts to content)
         const dimensionControls = document.createElement('div');
         dimensionControls.className = 'dimension-controls';
         
@@ -113,48 +113,24 @@ document.addEventListener('DOMContentLoaded', function() {
         widthInput.title = 'Width in pixels';
         widthInput.setAttribute('aria-label', 'Text box width');
         
-        const separator = document.createElement('span');
-        separator.textContent = '×';
-        
-        const heightLabel = document.createElement('label');
-        heightLabel.textContent = 'H:';
-        const heightInput = document.createElement('input');
-        heightInput.type = 'number';
-        heightInput.min = '24';
-        heightInput.max = '1000';
-        heightInput.value = '24';
-        heightInput.title = 'Height in pixels';
-        heightInput.setAttribute('aria-label', 'Text box height');
-        
         dimensionControls.appendChild(widthLabel);
         dimensionControls.appendChild(widthInput);
-        dimensionControls.appendChild(separator);
-        dimensionControls.appendChild(heightLabel);
-        dimensionControls.appendChild(heightInput);
 
         // Handle dimension input changes
         widthInput.addEventListener('input', function(e) {
             e.stopPropagation();
             const newWidth = Math.max(50, Math.min(1000, parseInt(this.value) || 50));
             textBox.style.width = newWidth + 'px';
+            // Trigger height auto-adjustment
+            adjustTextBoxHeight(textBox);
         });
         
         widthInput.addEventListener('change', function() {
             const newWidth = Math.max(50, Math.min(1000, parseInt(this.value) || 50));
             this.value = newWidth;
             textBox.style.width = newWidth + 'px';
-        });
-        
-        heightInput.addEventListener('input', function(e) {
-            e.stopPropagation();
-            const newHeight = Math.max(24, Math.min(1000, parseInt(this.value) || 24));
-            textBox.style.height = newHeight + 'px';
-        });
-        
-        heightInput.addEventListener('change', function() {
-            const newHeight = Math.max(24, Math.min(1000, parseInt(this.value) || 24));
-            this.value = newHeight;
-            textBox.style.height = newHeight + 'px';
+            // Trigger height auto-adjustment
+            adjustTextBoxHeight(textBox);
         });
 
         // Prevent clicks on dimension controls from propagating
@@ -215,13 +191,9 @@ document.addEventListener('DOMContentLoaded', function() {
             startDragFromHandle(touch.clientX, touch.clientY);
         });
 
-        // Auto-resize textarea as content changes (only if not manually sized)
+        // Auto-resize textarea height as content changes
         textBox.addEventListener('input', function() {
-            // Only auto-resize height if no explicit height is set or using auto
-            if (!this.style.height || this.style.height === 'auto') {
-                this.style.height = 'auto';
-                this.style.height = this.scrollHeight + 'px';
-            }
+            adjustTextBoxHeight(this);
             // Update dimension inputs
             updateDimensionInputs(container);
         });
@@ -320,12 +292,16 @@ document.addEventListener('DOMContentLoaded', function() {
     function updateDimensionInputs(container) {
         const textBox = container.querySelector('.text-box');
         const widthInput = container.querySelector('.dimension-controls input[aria-label="Text box width"]');
-        const heightInput = container.querySelector('.dimension-controls input[aria-label="Text box height"]');
         
-        if (textBox && widthInput && heightInput) {
+        if (textBox && widthInput) {
             widthInput.value = Math.round(textBox.offsetWidth);
-            heightInput.value = Math.round(textBox.offsetHeight);
         }
+    }
+
+    // Adjust text box height to fit content
+    function adjustTextBoxHeight(textBox) {
+        textBox.style.height = 'auto';
+        textBox.style.height = textBox.scrollHeight + 'px';
     }
 
     // Handle drag movement
@@ -378,49 +354,17 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }, { passive: false });
 
-    // Handle resize operation
+    // Handle resize operation (width only - height auto-adjusts)
     function handleResize(clientX, clientY) {
         const deltaX = clientX - resizeStartX;
-        const deltaY = clientY - resizeStartY;
         
         let newWidth = resizeStartWidth;
-        let newHeight = resizeStartHeight;
         let newLeft = resizeStartLeft;
-        let newTop = resizeStartTop;
         
         const minWidth = 50;
-        const minHeight = 24;
         
-        // Calculate new dimensions based on resize direction
+        // Calculate new width based on resize direction (only e and w)
         switch (resizeDirection) {
-            case 'se': // Southeast - resize right and bottom
-                newWidth = Math.max(minWidth, resizeStartWidth + deltaX);
-                newHeight = Math.max(minHeight, resizeStartHeight + deltaY);
-                break;
-            case 'sw': // Southwest - resize left and bottom
-                newWidth = Math.max(minWidth, resizeStartWidth - deltaX);
-                newHeight = Math.max(minHeight, resizeStartHeight + deltaY);
-                if (newWidth !== minWidth) {
-                    newLeft = resizeStartLeft + deltaX;
-                }
-                break;
-            case 'ne': // Northeast - resize right and top
-                newWidth = Math.max(minWidth, resizeStartWidth + deltaX);
-                newHeight = Math.max(minHeight, resizeStartHeight - deltaY);
-                if (newHeight !== minHeight) {
-                    newTop = resizeStartTop + deltaY;
-                }
-                break;
-            case 'nw': // Northwest - resize left and top
-                newWidth = Math.max(minWidth, resizeStartWidth - deltaX);
-                newHeight = Math.max(minHeight, resizeStartHeight - deltaY);
-                if (newWidth !== minWidth) {
-                    newLeft = resizeStartLeft + deltaX;
-                }
-                if (newHeight !== minHeight) {
-                    newTop = resizeStartTop + deltaY;
-                }
-                break;
             case 'e': // East - resize right
                 newWidth = Math.max(minWidth, resizeStartWidth + deltaX);
                 break;
@@ -430,22 +374,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     newLeft = resizeStartLeft + deltaX;
                 }
                 break;
-            case 'n': // North - resize top
-                newHeight = Math.max(minHeight, resizeStartHeight - deltaY);
-                if (newHeight !== minHeight) {
-                    newTop = resizeStartTop + deltaY;
-                }
-                break;
-            case 's': // South - resize bottom
-                newHeight = Math.max(minHeight, resizeStartHeight + deltaY);
-                break;
         }
         
-        // Apply new dimensions
+        // Apply new width
         activeTextBox.style.width = newWidth + 'px';
-        activeTextBox.style.height = newHeight + 'px';
         activeResizeContainer.style.left = newLeft + 'px';
-        activeResizeContainer.style.top = newTop + 'px';
+        
+        // Auto-adjust height to fit content
+        adjustTextBoxHeight(activeTextBox);
         
         // Update dimension inputs
         updateDimensionInputs(activeResizeContainer);
@@ -495,13 +431,12 @@ document.addEventListener('DOMContentLoaded', function() {
             const top = parseFloat(container.style.top) || 0;
             const textBox = container.querySelector('.text-box');
             
-            // Store original values including size
+            // Store original values (width only - height auto-adjusts)
             originalStyles.push({
                 container: container,
                 left: container.style.left,
                 top: container.style.top,
-                width: textBox ? textBox.style.width : null,
-                height: textBox ? textBox.style.height : null
+                width: textBox ? textBox.style.width : null
             });
 
             // Convert to percentage-based positioning for print
@@ -511,14 +446,11 @@ document.addEventListener('DOMContentLoaded', function() {
             container.style.left = leftPercent + '%';
             container.style.top = topPercent + '%';
             
-            // Convert text box dimensions to percentage-based for print
+            // Convert text box width to percentage-based for print (height auto-adjusts)
             if (textBox) {
                 const textBoxWidth = textBox.offsetWidth;
-                const textBoxHeight = textBox.offsetHeight;
                 const widthPercent = (textBoxWidth / canvasWidth) * 100;
-                const heightPercent = (textBoxHeight / canvasHeight) * 100;
                 textBox.style.width = widthPercent + '%';
-                textBox.style.height = heightPercent + '%';
             }
         });
 
@@ -530,7 +462,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 const textBox = item.container.querySelector('.text-box');
                 if (textBox) {
                     textBox.style.width = item.width;
-                    textBox.style.height = item.height;
+                    // Re-adjust height after restoring width
+                    adjustTextBoxHeight(textBox);
                 }
             });
             window.removeEventListener('afterprint', restorePositions);
