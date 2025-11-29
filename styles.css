@@ -205,21 +205,8 @@ body {
         max-height: 100vh;
     }
 
-    #text-layer {
-        /* Position the text layer to match the actual rendered image bounds */
-        /* Use aspect-ratio to match image proportions, with max constraints like object-fit: contain */
-        position: absolute;
-        aspect-ratio: var(--img-aspect-ratio, 1);
-        max-width: 100%;
-        max-height: 100%;
-        /* Auto width/height to let aspect-ratio control sizing */
-        width: auto;
-        height: 100%;
-        /* Center the text layer like object-fit: contain centers the image */
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-    }
+    /* Text layer positioning is handled by JavaScript during print
+       to match the actual rendered image bounds */
 }
 
 /* Responsive styles for smaller screens */

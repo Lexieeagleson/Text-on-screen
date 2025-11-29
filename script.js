@@ -234,50 +234,42 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // Helper function to calculate actual image bounds within container (accounting for object-fit: contain)
-    function getImageBounds() {
+    // Helper function to get actual rendered image bounds (accounting for object-fit: contain)
+    function getRenderedImageBounds() {
         const background = document.getElementById('background');
         const containerRect = canvasContainer.getBoundingClientRect();
         
-        // Get the natural dimensions of the image
         const imgNaturalWidth = background.naturalWidth;
         const imgNaturalHeight = background.naturalHeight;
+        const containerWidth = containerRect.width;
+        const containerHeight = containerRect.height;
         
-        // Calculate the aspect ratios
-        const containerAspect = containerRect.width / containerRect.height;
         const imgAspect = imgNaturalWidth / imgNaturalHeight;
+        const containerAspect = containerWidth / containerHeight;
         
         let renderedWidth, renderedHeight, offsetX, offsetY;
         
         if (imgAspect > containerAspect) {
-            // Image is wider relative to container - width fills container
-            renderedWidth = containerRect.width;
-            renderedHeight = containerRect.width / imgAspect;
+            // Image is wider - width fills container, height is scaled
+            renderedWidth = containerWidth;
+            renderedHeight = containerWidth / imgAspect;
             offsetX = 0;
-            offsetY = (containerRect.height - renderedHeight) / 2;
+            offsetY = (containerHeight - renderedHeight) / 2;
         } else {
-            // Image is taller relative to container - height fills container
-            renderedHeight = containerRect.height;
-            renderedWidth = containerRect.height * imgAspect;
-            offsetX = (containerRect.width - renderedWidth) / 2;
+            // Image is taller - height fills container, width is scaled
+            renderedHeight = containerHeight;
+            renderedWidth = containerHeight * imgAspect;
+            offsetX = (containerWidth - renderedWidth) / 2;
             offsetY = 0;
         }
         
-        return {
-            offsetX: offsetX,
-            offsetY: offsetY,
-            width: renderedWidth,
-            height: renderedHeight,
-            containerWidth: containerRect.width,
-            containerHeight: containerRect.height
-        };
+        return { offsetX, offsetY, width: renderedWidth, height: renderedHeight };
     }
 
     // Print button - scale content to fit on single page
     printBtn.addEventListener('click', function() {
-        // Get the actual image bounds (accounting for object-fit: contain)
-        const imageBounds = getImageBounds();
-        const background = document.getElementById('background');
+        // Get the actual rendered image bounds (accounting for object-fit: contain)
+        const imageBounds = getRenderedImageBounds();
 
         // Store original positions and calculate relative positions
         const textBoxContainers = textLayer.querySelectorAll('.text-box-container');
@@ -294,35 +286,37 @@ document.addEventListener('DOMContentLoaded', function() {
                 top: container.style.top
             });
 
-            // Calculate position relative to the actual image (not the container)
-            // This accounts for the offset created by object-fit: contain
-            const relativeToImageLeft = left - imageBounds.offsetX;
-            const relativeToImageTop = top - imageBounds.offsetY;
+            // Calculate position relative to the actual image bounds (not the container)
+            const relativeLeft = left - imageBounds.offsetX;
+            const relativeTop = top - imageBounds.offsetY;
             
             // Convert to percentage of the actual image dimensions
-            const leftPercent = (relativeToImageLeft / imageBounds.width) * 100;
-            const topPercent = (relativeToImageTop / imageBounds.height) * 100;
+            const leftPercent = (relativeLeft / imageBounds.width) * 100;
+            const topPercent = (relativeTop / imageBounds.height) * 100;
             
             container.style.left = leftPercent + '%';
             container.style.top = topPercent + '%';
         });
 
-        // Store original text layer styles
-        const originalTextLayerStyles = {
-            width: textLayer.style.width,
-            height: textLayer.style.height,
-            left: textLayer.style.left,
-            top: textLayer.style.top,
-            position: textLayer.style.position,
-            transform: textLayer.style.transform
-        };
-
-        // Calculate the image aspect ratio for print positioning
-        const imgAspect = background.naturalWidth / background.naturalHeight;
+        // Store original text layer position
+        const originalTextLayerStyle = textLayer.getAttribute('style') || '';
         
-        // Set CSS custom property for the image aspect ratio
-        // This allows the print CSS to position the text layer to match the image
-        canvasContainer.style.setProperty('--img-aspect-ratio', imgAspect);
+        // Position text layer to match image bounds during print
+        // This ensures text boxes align with the image when printed
+        const background = document.getElementById('background');
+        const imgAspect = background.naturalWidth / background.naturalHeight;
+        textLayer.style.cssText = `
+            position: absolute;
+            width: auto;
+            height: 100%;
+            aspect-ratio: ${imgAspect};
+            max-width: 100%;
+            max-height: 100%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        `;
 
         // Restore original pixel-based positions after print dialog closes
         function restorePositions() {
@@ -330,14 +324,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 item.container.style.left = item.left;
                 item.container.style.top = item.top;
             });
-            // Restore text layer styles
-            textLayer.style.width = originalTextLayerStyles.width;
-            textLayer.style.height = originalTextLayerStyles.height;
-            textLayer.style.left = originalTextLayerStyles.left;
-            textLayer.style.top = originalTextLayerStyles.top;
-            textLayer.style.position = originalTextLayerStyles.position;
-            textLayer.style.transform = originalTextLayerStyles.transform;
-            canvasContainer.style.removeProperty('--img-aspect-ratio');
+            // Restore original text layer style
+            textLayer.setAttribute('style', originalTextLayerStyle);
             window.removeEventListener('afterprint', restorePositions);
         }
 
