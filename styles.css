@@ -205,8 +205,7 @@ body {
         max-height: 100vh;
     }
 
-    /* Text layer positioning is handled by JavaScript during print
-       to match the actual rendered image bounds */
+    /* Text layer is positioned by JavaScript to match image bounds */
 }
 
 /* Responsive styles for smaller screens */
