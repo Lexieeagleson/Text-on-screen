@@ -12,7 +12,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Click on canvas to create a new text box or deselect
     canvasContainer.addEventListener('click', function(e) {
-        // Ignore clicks on existing text boxes, containers, or delete buttons
+        // Ignore clicks on existing text boxes, containers (for clicks in padding area), or delete buttons
         if (e.target.classList.contains('text-box') || 
             e.target.classList.contains('text-box-container') ||
             e.target.classList.contains('delete-btn')) {
@@ -133,7 +133,10 @@ document.addEventListener('DOMContentLoaded', function() {
     document.addEventListener('mousemove', function(e) {
         if (isDragging && activeTextBox) {
             const container = activeTextBox.closest('.text-box-container');
-            if (!container) return;
+            if (!container) {
+                console.warn('Text box container not found during drag operation');
+                return;
+            }
             
             const containerRect = canvasContainer.getBoundingClientRect();
             let newX = e.clientX - containerRect.left - dragOffsetX;
