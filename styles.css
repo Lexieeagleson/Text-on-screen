@@ -37,6 +37,37 @@ body {
 .text-box-container {
     position: absolute;
     pointer-events: auto;
+    display: flex;
+    align-items: flex-start;
+}
+
+.text-box-container .drag-handle {
+    position: relative;
+    width: 24px;
+    height: 24px;
+    min-width: 24px;
+    background-color: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 4px 0 0 4px;
+    font-size: 14px;
+    line-height: 1;
+    cursor: grab;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    touch-action: none;
+    user-select: none;
+}
+
+.text-box-container .drag-handle:hover {
+    background-color: #5a6268;
+}
+
+.text-box-container .drag-handle:active {
+    cursor: grabbing;
+    background-color: #495057;
 }
 
 .text-box-container .delete-btn {
@@ -73,6 +104,8 @@ body {
     min-height: 24px;
     background: transparent;
     border: 1px dashed #666;
+    border-left: none;
+    border-radius: 0 4px 4px 0;
     padding: 4px 8px;
     cursor: move;
     pointer-events: auto;
@@ -140,7 +173,42 @@ body {
         display: none !important;
     }
 
+    .drag-handle {
+        display: none !important;
+    }
+
     #canvas-container {
         overflow: visible;
+    }
+}
+
+/* Responsive styles for smaller screens */
+@media (max-width: 768px) {
+    .text-box-container .drag-handle {
+        width: 32px;
+        height: 32px;
+        min-width: 32px;
+        font-size: 18px;
+    }
+
+    .text-box {
+        min-height: 32px;
+        font-size: 14px;
+    }
+
+    .text-box-container .delete-btn {
+        width: 24px;
+        height: 24px;
+        font-size: 16px;
+    }
+
+    #button-bar {
+        gap: 10px;
+        padding: 10px;
+    }
+
+    #button-bar button {
+        padding: 8px 16px;
+        font-size: 14px;
     }
 }
