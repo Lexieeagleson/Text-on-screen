@@ -38,19 +38,20 @@ body {
     position: absolute;
     pointer-events: auto;
     display: flex;
+    flex-direction: column;
     align-items: flex-start;
 }
 
 .text-box-container .drag-handle {
     position: relative;
-    width: 24px;
-    height: 24px;
-    min-width: 24px;
+    width: 100%;
+    height: 20px;
+    min-height: 20px;
     background-color: #6c757d;
     color: white;
     border: none;
-    border-radius: 4px 0 0 4px;
-    font-size: 14px;
+    border-radius: 0 0 4px 4px;
+    font-size: 12px;
     line-height: 1;
     cursor: grab;
     display: flex;
@@ -59,6 +60,7 @@ body {
     padding: 0;
     touch-action: none;
     user-select: none;
+    order: 2;
 }
 
 .text-box-container .drag-handle:hover {
@@ -98,14 +100,88 @@ body {
     display: flex;
 }
 
+/* Resize handles */
+.resize-handle {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    background-color: #007bff;
+    border: 1px solid #fff;
+    border-radius: 2px;
+    display: none;
+    z-index: 10;
+}
+
+.text-box-container.selected .resize-handle,
+.text-box-container:hover .resize-handle {
+    display: block;
+}
+
+.resize-handle.e {
+    top: calc(50% - 10px);
+    right: -5px;
+    transform: translateY(-50%);
+    cursor: e-resize;
+}
+
+.resize-handle.w {
+    top: calc(50% - 10px);
+    left: -5px;
+    transform: translateY(-50%);
+    cursor: w-resize;
+}
+
+/* Dimension input controls */
+.dimension-controls {
+    position: absolute;
+    bottom: -50px;
+    left: 0;
+    display: none;
+    gap: 5px;
+    align-items: center;
+    background-color: rgba(255, 255, 255, 0.95);
+    padding: 3px 6px;
+    border-radius: 4px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    font-size: 11px;
+    z-index: 20;
+    white-space: nowrap;
+}
+
+.text-box-container.selected .dimension-controls {
+    display: flex;
+}
+
+.dimension-controls label {
+    color: #333;
+    font-weight: 500;
+}
+
+.dimension-controls input {
+    width: 45px;
+    padding: 2px 4px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    font-size: 11px;
+    text-align: center;
+}
+
+.dimension-controls input:focus {
+    outline: none;
+    border-color: #007bff;
+}
+
+.dimension-controls span {
+    color: #666;
+}
+
 .text-box {
     position: relative;
     min-width: 50px;
     min-height: 24px;
     background: transparent;
     border: 1px dashed #666;
-    border-left: none;
-    border-radius: 0 4px 4px 0;
+    border-radius: 4px 4px 0 0;
     padding: 4px 8px;
     cursor: move;
     pointer-events: auto;
@@ -113,6 +189,7 @@ body {
     outline: none;
     resize: none;
     overflow: hidden;
+    order: 1;
 }
 
 .text-box-container.selected .text-box {
@@ -163,12 +240,16 @@ body {
 @media print {
     @page {
         size: auto;
-        margin: 0;
+        margin: 0.5cm;
     }
 
-    body {
-        min-height: auto;
-        height: auto;
+    html, body {
+        width: 100%;
+        height: 100%;
+        min-height: 100%;
+        margin: 0;
+        padding: 0;
+        overflow: visible;
     }
 
     #button-bar {
@@ -187,22 +268,36 @@ body {
         display: none !important;
     }
 
+    .resize-handle {
+        display: none !important;
+    }
+
+    .dimension-controls {
+        display: none !important;
+    }
+
     #canvas-container {
-        overflow: visible;
-        width: 100vw;
-        height: 100vh;
-        max-width: 100vw;
-        max-height: 100vh;
+        position: relative;
+        width: 100%;
+        height: 100%;
+        max-width: 100%;
+        max-height: 100%;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
         flex: none;
         position: relative;
     }
 
     #background {
-        width: 100%;
-        height: 100%;
+        display: block;
+        max-width: 100%;
+        max-height: 100%;
+        width: auto;
+        height: auto;
         object-fit: contain;
-        max-width: 100vw;
-        max-height: 100vh;
+        object-position: center;
     }
 
     /* Text layer is positioned by JavaScript to match image bounds */
@@ -211,10 +306,10 @@ body {
 /* Responsive styles for smaller screens */
 @media (max-width: 768px) {
     .text-box-container .drag-handle {
-        width: 32px;
-        height: 32px;
-        min-width: 32px;
-        font-size: 18px;
+        width: 100%;
+        height: 24px;
+        min-height: 24px;
+        font-size: 14px;
     }
 
     .text-box {
