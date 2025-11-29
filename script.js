@@ -264,14 +264,19 @@ document.addEventListener('DOMContentLoaded', function() {
             container.style.top = topPercent + '%';
         });
 
+        // Restore original pixel-based positions after print dialog closes
+        function restorePositions() {
+            originalStyles.forEach(function(item) {
+                item.container.style.left = item.left;
+                item.container.style.top = item.top;
+            });
+            window.removeEventListener('afterprint', restorePositions);
+        }
+
+        window.addEventListener('afterprint', restorePositions);
+
         // Print the page
         window.print();
-
-        // Restore original pixel-based positions after print
-        originalStyles.forEach(function(item) {
-            item.container.style.left = item.left;
-            item.container.style.top = item.top;
-        });
     });
 
     // Reset button
