@@ -415,12 +415,43 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
+    // Helper function to calculate the actual rendered image bounds
+    // This accounts for object-fit: contain which centers the image
+    function getRenderedImageBounds() {
+        const background = document.getElementById('background');
+        const containerRect = canvasContainer.getBoundingClientRect();
+        
+        const containerWidth = containerRect.width;
+        const containerHeight = containerRect.height;
+        const imgNaturalWidth = background.naturalWidth;
+        const imgNaturalHeight = background.naturalHeight;
+        
+        const containerAspect = containerWidth / containerHeight;
+        const imgAspect = imgNaturalWidth / imgNaturalHeight;
+        
+        let renderedWidth, renderedHeight, offsetX, offsetY;
+        
+        if (imgAspect > containerAspect) {
+            // Image is wider - width fills container
+            renderedWidth = containerWidth;
+            renderedHeight = containerWidth / imgAspect;
+            offsetX = 0;
+            offsetY = (containerHeight - renderedHeight) / 2;
+        } else {
+            // Image is taller - height fills container
+            renderedHeight = containerHeight;
+            renderedWidth = containerHeight * imgAspect;
+            offsetX = (containerWidth - renderedWidth) / 2;
+            offsetY = 0;
+        }
+        
+        return { offsetX, offsetY, width: renderedWidth, height: renderedHeight };
+    }
+
     // Print button - scale content to fit on single page
     printBtn.addEventListener('click', function() {
-        // Get the current canvas dimensions
-        const canvasRect = canvasContainer.getBoundingClientRect();
-        const canvasWidth = canvasRect.width;
-        const canvasHeight = canvasRect.height;
+        const background = document.getElementById('background');
+        const imageBounds = getRenderedImageBounds();
 
         // Store original positions and calculate relative positions
         const textBoxContainers = textLayer.querySelectorAll('.text-box-container');
@@ -439,9 +470,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 width: textBox ? textBox.style.width : null
             });
 
-            // Convert to percentage-based positioning for print
-            const leftPercent = (left / canvasWidth) * 100;
-            const topPercent = (top / canvasHeight) * 100;
+            // Calculate position relative to actual rendered image (not container)
+            const relativeLeft = left - imageBounds.offsetX;
+            const relativeTop = top - imageBounds.offsetY;
+            
+            // Convert to percentage of actual image dimensions
+            const leftPercent = (relativeLeft / imageBounds.width) * 100;
+            const topPercent = (relativeTop / imageBounds.height) * 100;
             
             container.style.left = leftPercent + '%';
             container.style.top = topPercent + '%';
@@ -454,7 +489,25 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
-        // Restore original pixel-based positions after print dialog closes
+        // Store original text layer style
+        const originalTextLayerStyle = textLayer.getAttribute('style') || '';
+        
+        // Position text layer to match image bounds during print
+        const imgAspect = background.naturalWidth / background.naturalHeight;
+        textLayer.style.cssText = `
+            position: absolute;
+            width: auto;
+            height: 100%;
+            aspect-ratio: ${imgAspect};
+            max-width: 100%;
+            max-height: 100%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        `;
+
+        // Restore original positions after print dialog closes
         function restorePositions() {
             originalStyles.forEach(function(item) {
                 item.container.style.left = item.left;
@@ -466,6 +519,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     adjustTextBoxHeight(textBox);
                 }
             });
+            textLayer.setAttribute('style', originalTextLayerStyle);
             window.removeEventListener('afterprint', restorePositions);
         }
 
