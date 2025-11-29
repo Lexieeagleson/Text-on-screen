@@ -12,14 +12,19 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Click on canvas to create a new text box or deselect
     canvasContainer.addEventListener('click', function(e) {
-        // Ignore clicks on existing text boxes
-        if (e.target.classList.contains('text-box')) {
+        // Ignore clicks on existing text boxes, containers (for clicks in padding area), or delete buttons
+        if (e.target.classList.contains('text-box') || 
+            e.target.classList.contains('text-box-container') ||
+            e.target.classList.contains('delete-btn')) {
             return;
         }
 
         // Deselect any selected text box when clicking on canvas
         if (selectedTextBox) {
-            selectedTextBox.classList.remove('selected');
+            const container = selectedTextBox.closest('.text-box-container');
+            if (container) {
+                container.classList.remove('selected');
+            }
             selectedTextBox.blur();
             selectedTextBox = null;
         }
@@ -32,11 +37,35 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     function createTextBox(x, y) {
+        // Create container for text box and delete button
+        const container = document.createElement('div');
+        container.className = 'text-box-container';
+        container.style.left = x + 'px';
+        container.style.top = y + 'px';
+
         const textBox = document.createElement('textarea');
         textBox.className = 'text-box';
-        textBox.style.left = x + 'px';
-        textBox.style.top = y + 'px';
         textBox.rows = 1;
+
+        // Create delete button
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'delete-btn';
+        deleteBtn.innerHTML = '&times;';
+        deleteBtn.title = 'Delete text box';
+
+        // Delete button click handler
+        deleteBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            if (confirm('Are you sure you want to delete this text box?')) {
+                if (selectedTextBox === textBox) {
+                    selectedTextBox = null;
+                }
+                if (activeTextBox === textBox) {
+                    activeTextBox = null;
+                }
+                container.remove();
+            }
+        });
 
         // Auto-resize textarea as content changes
         textBox.addEventListener('input', function() {
@@ -48,7 +77,10 @@ document.addEventListener('DOMContentLoaded', function() {
         textBox.addEventListener('mousedown', function(e) {
             // Select this text box
             if (selectedTextBox && selectedTextBox !== this) {
-                selectedTextBox.classList.remove('selected');
+                const oldContainer = selectedTextBox.closest('.text-box-container');
+                if (oldContainer) {
+                    oldContainer.classList.remove('selected');
+                }
                 selectedTextBox.blur();
             }
             
@@ -58,8 +90,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 isDragging = true;
                 activeTextBox = this;
                 selectedTextBox = this;
-                this.classList.add('selected');
-                const boxRect = this.getBoundingClientRect();
+                container.classList.add('selected');
+                const boxRect = container.getBoundingClientRect();
                 dragOffsetX = e.clientX - boxRect.left;
                 dragOffsetY = e.clientY - boxRect.top;
             }
@@ -71,23 +103,28 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!isDragging) {
                 // Select but don't focus (for moving)
                 if (selectedTextBox && selectedTextBox !== this) {
-                    selectedTextBox.classList.remove('selected');
+                    const oldContainer = selectedTextBox.closest('.text-box-container');
+                    if (oldContainer) {
+                        oldContainer.classList.remove('selected');
+                    }
                     selectedTextBox.blur();
                 }
                 selectedTextBox = this;
-                this.classList.add('selected');
+                container.classList.add('selected');
             }
         });
 
         // Double-click to enter edit mode
         textBox.addEventListener('dblclick', function(e) {
             e.stopPropagation();
-            this.classList.remove('selected');
+            container.classList.remove('selected');
             this.focus();
             selectedTextBox = this;
         });
 
-        textLayer.appendChild(textBox);
+        container.appendChild(textBox);
+        container.appendChild(deleteBtn);
+        textLayer.appendChild(container);
         textBox.focus();
         selectedTextBox = textBox;
     }
@@ -95,16 +132,22 @@ document.addEventListener('DOMContentLoaded', function() {
     // Handle drag movement
     document.addEventListener('mousemove', function(e) {
         if (isDragging && activeTextBox) {
+            const container = activeTextBox.closest('.text-box-container');
+            if (!container) {
+                console.warn('Text box container not found during drag operation');
+                return;
+            }
+            
             const containerRect = canvasContainer.getBoundingClientRect();
             let newX = e.clientX - containerRect.left - dragOffsetX;
             let newY = e.clientY - containerRect.top - dragOffsetY;
 
             // Keep within bounds
-            newX = Math.max(0, Math.min(newX, containerRect.width - activeTextBox.offsetWidth));
-            newY = Math.max(0, Math.min(newY, containerRect.height - activeTextBox.offsetHeight));
+            newX = Math.max(0, Math.min(newX, containerRect.width - container.offsetWidth));
+            newY = Math.max(0, Math.min(newY, containerRect.height - container.offsetHeight));
 
-            activeTextBox.style.left = newX + 'px';
-            activeTextBox.style.top = newY + 'px';
+            container.style.left = newX + 'px';
+            container.style.top = newY + 'px';
         }
     });
 
