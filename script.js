@@ -5,15 +5,23 @@ document.addEventListener('DOMContentLoaded', function() {
     const resetBtn = document.getElementById('reset-btn');
 
     let activeTextBox = null;
+    let selectedTextBox = null;
     let isDragging = false;
     let dragOffsetX = 0;
     let dragOffsetY = 0;
 
-    // Click on canvas to create a new text box
+    // Click on canvas to create a new text box or deselect
     canvasContainer.addEventListener('click', function(e) {
         // Ignore clicks on existing text boxes
         if (e.target.classList.contains('text-box')) {
             return;
+        }
+
+        // Deselect any selected text box when clicking on canvas
+        if (selectedTextBox) {
+            selectedTextBox.classList.remove('selected');
+            selectedTextBox.blur();
+            selectedTextBox = null;
         }
 
         const rect = canvasContainer.getBoundingClientRect();
@@ -36,29 +44,52 @@ document.addEventListener('DOMContentLoaded', function() {
             this.style.height = this.scrollHeight + 'px';
         });
 
-        // Handle drag start
+        // Handle drag start - can drag when selected (not editing)
         textBox.addEventListener('mousedown', function(e) {
-            // Only start drag if not focused for editing
+            // Select this text box
+            if (selectedTextBox && selectedTextBox !== this) {
+                selectedTextBox.classList.remove('selected');
+                selectedTextBox.blur();
+            }
+            
+            // If not in edit mode (not focused), allow dragging
             if (document.activeElement !== this) {
                 e.preventDefault();
                 isDragging = true;
                 activeTextBox = this;
+                selectedTextBox = this;
+                this.classList.add('selected');
                 const boxRect = this.getBoundingClientRect();
                 dragOffsetX = e.clientX - boxRect.left;
                 dragOffsetY = e.clientY - boxRect.top;
             }
         });
 
-        // Click to focus for editing
+        // Single click to select for moving
         textBox.addEventListener('click', function(e) {
-            if (!isDragging) {
-                this.focus();
-            }
             e.stopPropagation();
+            if (!isDragging) {
+                // Select but don't focus (for moving)
+                if (selectedTextBox && selectedTextBox !== this) {
+                    selectedTextBox.classList.remove('selected');
+                    selectedTextBox.blur();
+                }
+                selectedTextBox = this;
+                this.classList.add('selected');
+            }
+        });
+
+        // Double-click to enter edit mode
+        textBox.addEventListener('dblclick', function(e) {
+            e.stopPropagation();
+            this.classList.remove('selected');
+            this.focus();
+            selectedTextBox = this;
         });
 
         textLayer.appendChild(textBox);
         textBox.focus();
+        selectedTextBox = textBox;
     }
 
     // Handle drag movement
