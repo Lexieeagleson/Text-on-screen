@@ -12,10 +12,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Click on canvas to create a new text box or deselect
     canvasContainer.addEventListener('click', function(e) {
-        // Ignore clicks on existing text boxes, containers (for clicks in padding area), or delete buttons
+        // Ignore clicks on existing text boxes, containers (for clicks in padding area), delete buttons, or drag handles
         if (e.target.classList.contains('text-box') || 
             e.target.classList.contains('text-box-container') ||
-            e.target.classList.contains('delete-btn')) {
+            e.target.classList.contains('delete-btn') ||
+            e.target.classList.contains('drag-handle')) {
             return;
         }
 
@@ -47,6 +48,13 @@ document.addEventListener('DOMContentLoaded', function() {
         textBox.className = 'text-box';
         textBox.rows = 1;
 
+        // Create drag handle
+        const dragHandle = document.createElement('button');
+        dragHandle.className = 'drag-handle';
+        dragHandle.innerHTML = '&#9776;'; // Hamburger icon (≡) as drag handle
+        dragHandle.title = 'Drag to move';
+        dragHandle.setAttribute('aria-label', 'Drag handle - click and drag to move text box');
+
         // Create delete button
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'delete-btn';
@@ -65,6 +73,53 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 container.remove();
             }
+        });
+
+        // Drag handle - mouse events
+        dragHandle.addEventListener('mousedown', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            // Deselect any other text box
+            if (selectedTextBox && selectedTextBox !== textBox) {
+                const oldContainer = selectedTextBox.closest('.text-box-container');
+                if (oldContainer) {
+                    oldContainer.classList.remove('selected');
+                }
+                selectedTextBox.blur();
+            }
+            
+            isDragging = true;
+            activeTextBox = textBox;
+            selectedTextBox = textBox;
+            container.classList.add('selected');
+            const boxRect = container.getBoundingClientRect();
+            dragOffsetX = e.clientX - boxRect.left;
+            dragOffsetY = e.clientY - boxRect.top;
+        });
+
+        // Drag handle - touch events for mobile support
+        dragHandle.addEventListener('touchstart', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            // Deselect any other text box
+            if (selectedTextBox && selectedTextBox !== textBox) {
+                const oldContainer = selectedTextBox.closest('.text-box-container');
+                if (oldContainer) {
+                    oldContainer.classList.remove('selected');
+                }
+                selectedTextBox.blur();
+            }
+            
+            isDragging = true;
+            activeTextBox = textBox;
+            selectedTextBox = textBox;
+            container.classList.add('selected');
+            const boxRect = container.getBoundingClientRect();
+            const touch = e.touches[0];
+            dragOffsetX = touch.clientX - boxRect.left;
+            dragOffsetY = touch.clientY - boxRect.top;
         });
 
         // Auto-resize textarea as content changes
@@ -122,6 +177,7 @@ document.addEventListener('DOMContentLoaded', function() {
             selectedTextBox = this;
         });
 
+        container.appendChild(dragHandle);
         container.appendChild(textBox);
         container.appendChild(deleteBtn);
         textLayer.appendChild(container);
@@ -151,8 +207,39 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
+    // Handle touch move for mobile drag support
+    document.addEventListener('touchmove', function(e) {
+        if (isDragging && activeTextBox) {
+            const container = activeTextBox.closest('.text-box-container');
+            if (!container) {
+                console.warn('Text box container not found during drag operation');
+                return;
+            }
+            
+            const touch = e.touches[0];
+            const containerRect = canvasContainer.getBoundingClientRect();
+            let newX = touch.clientX - containerRect.left - dragOffsetX;
+            let newY = touch.clientY - containerRect.top - dragOffsetY;
+
+            // Keep within bounds
+            newX = Math.max(0, Math.min(newX, containerRect.width - container.offsetWidth));
+            newY = Math.max(0, Math.min(newY, containerRect.height - container.offsetHeight));
+
+            container.style.left = newX + 'px';
+            container.style.top = newY + 'px';
+        }
+    }, { passive: false });
+
     // Handle drag end
     document.addEventListener('mouseup', function() {
+        if (isDragging) {
+            isDragging = false;
+            activeTextBox = null;
+        }
+    });
+
+    // Handle touch end for mobile drag support
+    document.addEventListener('touchend', function() {
         if (isDragging) {
             isDragging = false;
             activeTextBox = null;
