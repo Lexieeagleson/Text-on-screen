@@ -234,8 +234,48 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // Print button
+    // Print button - scale content to fit on single page
     printBtn.addEventListener('click', function() {
+        // Get the current canvas dimensions
+        const canvasRect = canvasContainer.getBoundingClientRect();
+        const canvasWidth = canvasRect.width;
+        const canvasHeight = canvasRect.height;
+
+        // Store original positions and calculate relative positions
+        const textBoxContainers = textLayer.querySelectorAll('.text-box-container');
+        const originalStyles = [];
+
+        textBoxContainers.forEach(function(container) {
+            const left = parseFloat(container.style.left) || 0;
+            const top = parseFloat(container.style.top) || 0;
+            
+            // Store original values
+            originalStyles.push({
+                container: container,
+                left: container.style.left,
+                top: container.style.top
+            });
+
+            // Convert to percentage-based positioning for print
+            const leftPercent = (left / canvasWidth) * 100;
+            const topPercent = (top / canvasHeight) * 100;
+            
+            container.style.left = leftPercent + '%';
+            container.style.top = topPercent + '%';
+        });
+
+        // Restore original pixel-based positions after print dialog closes
+        function restorePositions() {
+            originalStyles.forEach(function(item) {
+                item.container.style.left = item.left;
+                item.container.style.top = item.top;
+            });
+            window.removeEventListener('afterprint', restorePositions);
+        }
+
+        window.addEventListener('afterprint', restorePositions);
+
+        // Print the page
         window.print();
     });
 
