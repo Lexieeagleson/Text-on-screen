@@ -469,7 +469,6 @@ document.addEventListener('DOMContentLoaded', function() {
         // Use html2canvas to capture the canvas-container
         html2canvas(canvasContainer, {
             useCORS: true,
-            allowTaint: true,
             backgroundColor: null,
             scale: 2 // Higher quality for print
         }).then(function(canvas) {
