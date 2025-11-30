@@ -448,85 +448,70 @@ document.addEventListener('DOMContentLoaded', function() {
         return { offsetX, offsetY, width: renderedWidth, height: renderedHeight };
     }
 
-    // Print button - scale content to fit on single page
+    // Print button - capture screenshot using html2canvas and print it
     printBtn.addEventListener('click', function() {
-        const background = document.getElementById('background');
-        const imageBounds = getRenderedImageBounds();
-
-        // Store original positions and calculate relative positions
-        const textBoxContainers = textLayer.querySelectorAll('.text-box-container');
-        const originalStyles = [];
-
-        textBoxContainers.forEach(function(container) {
-            const left = parseFloat(container.style.left) || 0;
-            const top = parseFloat(container.style.top) || 0;
-            const textBox = container.querySelector('.text-box');
-            
-            // Store original values (width only - height auto-adjusts)
-            originalStyles.push({
-                container: container,
-                left: container.style.left,
-                top: container.style.top,
-                width: textBox ? textBox.style.width : null
-            });
-
-            // Calculate position relative to actual rendered image (not container)
-            const relativeLeft = left - imageBounds.offsetX;
-            const relativeTop = top - imageBounds.offsetY;
-            
-            // Convert to percentage of actual image dimensions
-            const leftPercent = (relativeLeft / imageBounds.width) * 100;
-            const topPercent = (relativeTop / imageBounds.height) * 100;
-            
-            container.style.left = leftPercent + '%';
-            container.style.top = topPercent + '%';
-            
-            // Convert text box width to percentage-based for print (height auto-adjusts)
-            if (textBox) {
-                const textBoxWidth = textBox.offsetWidth;
-                const widthPercent = (textBoxWidth / imageBounds.width) * 100;
-                textBox.style.width = widthPercent + '%';
+        // Deselect any selected text box to hide UI elements
+        if (selectedTextBox) {
+            const container = selectedTextBox.closest('.text-box-container');
+            if (container) {
+                container.classList.remove('selected');
             }
-        });
-
-        // Store original text layer style
-        const originalTextLayerStyle = textLayer.getAttribute('style') || '';
-        
-        // Position text layer to match image bounds during print
-        const imgAspect = background.naturalWidth / background.naturalHeight;
-        textLayer.style.cssText = `
-            position: absolute;
-            width: auto;
-            height: 100%;
-            aspect-ratio: ${imgAspect};
-            max-width: 100%;
-            max-height: 100%;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            pointer-events: none;
-        `;
-
-        // Restore original positions after print dialog closes
-        function restorePositions() {
-            originalStyles.forEach(function(item) {
-                item.container.style.left = item.left;
-                item.container.style.top = item.top;
-                const textBox = item.container.querySelector('.text-box');
-                if (textBox) {
-                    textBox.style.width = item.width;
-                    // Re-adjust height after restoring width
-                    adjustTextBoxHeight(textBox);
-                }
-            });
-            textLayer.setAttribute('style', originalTextLayerStyle);
-            window.removeEventListener('afterprint', restorePositions);
+            selectedTextBox.blur();
+            selectedTextBox = null;
         }
 
-        window.addEventListener('afterprint', restorePositions);
+        // Hide UI elements before capture
+        const textBoxContainers = textLayer.querySelectorAll('.text-box-container');
+        textBoxContainers.forEach(function(container) {
+            container.classList.add('printing');
+        });
 
-        // Print the page
-        window.print();
+        // Use html2canvas to capture the canvas-container
+        html2canvas(canvasContainer, {
+            useCORS: true,
+            allowTaint: true,
+            backgroundColor: null,
+            scale: 2 // Higher quality for print
+        }).then(function(canvas) {
+            // Remove printing class
+            textBoxContainers.forEach(function(container) {
+                container.classList.remove('printing');
+            });
+
+            // Create a print container with the screenshot
+            const printContainer = document.createElement('div');
+            printContainer.id = 'print-screenshot-container';
+            printContainer.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 10000; background: white; display: flex; align-items: center; justify-content: center;';
+            
+            const img = document.createElement('img');
+            img.src = canvas.toDataURL('image/png');
+            img.style.cssText = 'max-width: 100%; max-height: 100%; object-fit: contain;';
+            
+            printContainer.appendChild(img);
+            document.body.appendChild(printContainer);
+
+            // Hide original content during print
+            canvasContainer.style.visibility = 'hidden';
+
+            // Cleanup function after print
+            function cleanup() {
+                printContainer.remove();
+                canvasContainer.style.visibility = 'visible';
+                window.removeEventListener('afterprint', cleanup);
+            }
+
+            window.addEventListener('afterprint', cleanup);
+
+            // Trigger print dialog
+            window.print();
+        }).catch(function(error) {
+            console.error('Error capturing screenshot:', error);
+            // Remove printing class on error
+            textBoxContainers.forEach(function(container) {
+                container.classList.remove('printing');
+            });
+            alert('Failed to capture screenshot for printing. Please try again.');
+        });
     });
 
     // Reset button
