@@ -480,11 +480,9 @@ document.addEventListener('DOMContentLoaded', function() {
             // Create a print container with the screenshot
             const printContainer = document.createElement('div');
             printContainer.id = 'print-screenshot-container';
-            printContainer.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 10000; background: white; display: flex; align-items: center; justify-content: center;';
             
             const img = document.createElement('img');
             img.src = canvas.toDataURL('image/png');
-            img.style.cssText = 'max-width: 100%; max-height: 100%; object-fit: contain;';
             
             printContainer.appendChild(img);
             document.body.appendChild(printContainer);
@@ -509,7 +507,7 @@ document.addEventListener('DOMContentLoaded', function() {
             textBoxContainers.forEach(function(container) {
                 container.classList.remove('printing');
             });
-            alert('Failed to capture screenshot for printing. Please try again.');
+            alert('Failed to capture screenshot for printing. This may be due to cross-origin image restrictions or browser compatibility issues. Please try refreshing the page or using a different browser.');
         });
     });
 
