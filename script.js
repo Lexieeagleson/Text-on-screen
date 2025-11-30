@@ -470,6 +470,59 @@ document.addEventListener('DOMContentLoaded', function() {
             container.classList.add('printing');
         });
 
+        // Get the actual visible container dimensions from getBoundingClientRect
+        // This gives us the viewport-relative dimensions, not the full scrollable height
+        var containerRect = canvasContainer.getBoundingClientRect();
+        var visibleContainerWidth = containerRect.width;
+        var visibleContainerHeight = containerRect.height;
+        
+        // Get the rendered image bounds (accounting for object-fit: contain)
+        var imageBounds = getRenderedImageBounds();
+        
+        // Store text box positions as percentages relative to the rendered image
+        // This allows proper scaling when the container size changes during capture
+        var textBoxPositions = [];
+        textBoxContainers.forEach(function(container, index) {
+            var boxRect = container.getBoundingClientRect();
+            // Calculate position relative to container
+            var leftInContainer = boxRect.left - containerRect.left;
+            var topInContainer = boxRect.top - containerRect.top;
+            
+            // Convert to percentage of container dimensions for scaling
+            var leftPercent = leftInContainer / visibleContainerWidth;
+            var topPercent = topInContainer / visibleContainerHeight;
+            
+            textBoxPositions.push({
+                index: index,
+                leftPercent: leftPercent,
+                topPercent: topPercent,
+                originalLeft: leftInContainer,
+                originalTop: topInContainer
+            });
+        });
+
+        // CRITICAL: Fix the container dimensions BEFORE html2canvas captures
+        // This ensures the clone has the same dimensions as the original
+        var originalContainerStyle = {
+            width: canvasContainer.style.width,
+            height: canvasContainer.style.height,
+            flex: canvasContainer.style.flex,
+            position: canvasContainer.style.position
+        };
+        
+        // Set explicit dimensions on the container
+        canvasContainer.style.width = visibleContainerWidth + 'px';
+        canvasContainer.style.height = visibleContainerHeight + 'px';
+        canvasContainer.style.flex = 'none';
+
+        // Helper function to restore container style
+        function restoreContainerStyle() {
+            canvasContainer.style.width = originalContainerStyle.width;
+            canvasContainer.style.height = originalContainerStyle.height;
+            canvasContainer.style.flex = originalContainerStyle.flex;
+            canvasContainer.style.position = originalContainerStyle.position;
+        }
+
         // Helper function to restore button state
         function restoreButtonState() {
             printBtn.disabled = false;
@@ -486,6 +539,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Helper function to trigger print with fallback (prints current page without screenshot)
         function triggerFallbackPrint() {
             removePrintingClass();
+            restoreContainerStyle();
             restoreButtonState();
             
             // Inform user about fallback
@@ -578,16 +632,58 @@ document.addEventListener('DOMContentLoaded', function() {
             logging: false,             // Disable console logging for cleaner output
             imageTimeout: 15000,        // Timeout for loading images (15 seconds)
             removeContainer: true,      // Remove cloned container after rendering
+            // Explicitly set the capture dimensions to match the visible container
+            width: visibleContainerWidth,
+            height: visibleContainerHeight,
+            windowWidth: visibleContainerWidth,
+            windowHeight: visibleContainerHeight,
             onclone: function(clonedDoc) {
                 // Additional processing on the cloned document if needed
                 // Ensure visibility of elements in the clone
                 var clonedContainer = clonedDoc.getElementById('canvas-container');
                 if (clonedContainer) {
                     clonedContainer.style.visibility = 'visible';
+                    
+                    // Fix the container dimensions to match the original visible dimensions
+                    // This is critical because html2canvas may calculate different dimensions
+                    clonedContainer.style.width = visibleContainerWidth + 'px';
+                    clonedContainer.style.height = visibleContainerHeight + 'px';
+                    clonedContainer.style.flex = 'none';
+                    clonedContainer.style.overflow = 'hidden';
+                    clonedContainer.style.position = 'relative';
+                    
+                    // Also fix the text layer dimensions
+                    var clonedTextLayer = clonedContainer.querySelector('#text-layer');
+                    if (clonedTextLayer) {
+                        clonedTextLayer.style.width = visibleContainerWidth + 'px';
+                        clonedTextLayer.style.height = visibleContainerHeight + 'px';
+                    }
+                    
+                    // Also fix the background image dimensions
+                    var clonedBackground = clonedContainer.querySelector('#background');
+                    if (clonedBackground) {
+                        clonedBackground.style.width = '100%';
+                        clonedBackground.style.height = '100%';
+                        clonedBackground.style.objectFit = 'contain';
+                    }
+                    
+                    // Fix text box positions in the cloned document
+                    // Use the original pixel positions since we've fixed the container size
+                    var clonedTextBoxContainers = clonedContainer.querySelectorAll('.text-box-container');
+                    clonedTextBoxContainers.forEach(function(clonedBox, index) {
+                        if (textBoxPositions[index]) {
+                            // Apply the original pixel positions
+                            clonedBox.style.left = textBoxPositions[index].originalLeft + 'px';
+                            clonedBox.style.top = textBoxPositions[index].originalTop + 'px';
+                        }
+                    });
                 }
             }
         }).then(function(canvas) {
             clearTimeout(captureTimeout);
+            
+            // Restore container style after capture
+            restoreContainerStyle();
             
             // Remove printing class
             removePrintingClass();
@@ -608,6 +704,9 @@ document.addEventListener('DOMContentLoaded', function() {
         }).catch(function(error) {
             clearTimeout(captureTimeout);
             console.error('Error capturing screenshot:', error);
+            
+            // Restore container style on error
+            restoreContainerStyle();
             
             // Remove printing class on error
             removePrintingClass();
