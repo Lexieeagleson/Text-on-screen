@@ -470,17 +470,35 @@ document.addEventListener('DOMContentLoaded', function() {
             container.classList.add('printing');
         });
 
-        // Get the actual visible container dimensions from getBoundingClientRect
-        // This gives us the viewport-relative dimensions, not the full scrollable height
+        // Get the button bar height to calculate the actual visible container height
+        var buttonBar = document.getElementById('button-bar');
+        var buttonBarHeight = buttonBar ? buttonBar.offsetHeight : 0;
+        
+        // Calculate the actual visible container dimensions
+        // The container height should be viewport height minus button bar
+        var viewportHeight = window.innerHeight;
+        var viewportWidth = window.innerWidth;
+        
+        // Get the container rect for position calculations
         var containerRect = canvasContainer.getBoundingClientRect();
-        var visibleContainerWidth = containerRect.width;
-        var visibleContainerHeight = containerRect.height;
+        
+        // Use viewport-based dimensions for the visible area
+        var visibleContainerWidth = viewportWidth;
+        var visibleContainerHeight = viewportHeight - buttonBarHeight;
+        
+        console.log('Viewport:', viewportWidth, 'x', viewportHeight);
+        console.log('Button bar height:', buttonBarHeight);
+        console.log('Visible container:', visibleContainerWidth, 'x', visibleContainerHeight);
+        console.log('Container rect:', containerRect.width, 'x', containerRect.height);
         
         // Get the rendered image bounds (accounting for object-fit: contain)
         var imageBounds = getRenderedImageBounds();
         
-        // Store text box positions as percentages relative to the rendered image
-        // This allows proper scaling when the container size changes during capture
+        // Get the actual container height (which may be larger than viewport due to image)
+        var actualContainerHeight = containerRect.height;
+        
+        // Store text box positions relative to the container
+        // We'll scale these positions when applying to the clone
         var textBoxPositions = [];
         textBoxContainers.forEach(function(container, index) {
             var boxRect = container.getBoundingClientRect();
@@ -488,17 +506,21 @@ document.addEventListener('DOMContentLoaded', function() {
             var leftInContainer = boxRect.left - containerRect.left;
             var topInContainer = boxRect.top - containerRect.top;
             
-            // Convert to percentage of container dimensions for scaling
+            // Convert to percentage of ACTUAL container dimensions
+            // This allows us to scale correctly when the container size changes
             var leftPercent = leftInContainer / visibleContainerWidth;
-            var topPercent = topInContainer / visibleContainerHeight;
+            var topPercent = topInContainer / actualContainerHeight;
             
             textBoxPositions.push({
                 index: index,
                 leftPercent: leftPercent,
                 topPercent: topPercent,
                 originalLeft: leftInContainer,
-                originalTop: topInContainer
+                originalTop: topInContainer,
+                actualContainerHeight: actualContainerHeight
             });
+            
+            console.log('Text box', index, 'position:', leftInContainer, topInContainer, 'percent:', leftPercent, topPercent);
         });
 
         // CRITICAL: Fix the container dimensions BEFORE html2canvas captures
@@ -507,13 +529,15 @@ document.addEventListener('DOMContentLoaded', function() {
             width: canvasContainer.style.width,
             height: canvasContainer.style.height,
             flex: canvasContainer.style.flex,
-            position: canvasContainer.style.position
+            position: canvasContainer.style.position,
+            overflow: canvasContainer.style.overflow
         };
         
-        // Set explicit dimensions on the container
+        // Set explicit dimensions on the container to match the visible viewport
         canvasContainer.style.width = visibleContainerWidth + 'px';
         canvasContainer.style.height = visibleContainerHeight + 'px';
         canvasContainer.style.flex = 'none';
+        canvasContainer.style.overflow = 'hidden';
 
         // Helper function to restore container style
         function restoreContainerStyle() {
@@ -521,6 +545,7 @@ document.addEventListener('DOMContentLoaded', function() {
             canvasContainer.style.height = originalContainerStyle.height;
             canvasContainer.style.flex = originalContainerStyle.flex;
             canvasContainer.style.position = originalContainerStyle.position;
+            canvasContainer.style.overflow = originalContainerStyle.overflow;
         }
 
         // Helper function to restore button state
@@ -627,54 +652,93 @@ document.addEventListener('DOMContentLoaded', function() {
             useCORS: true,              // Attempt to load images using CORS
             allowTaint: false,          // Disable tainted canvas for security (prevents cross-origin data exposure)
             foreignObjectRendering: false, // Disable foreignObject for better compatibility
-            backgroundColor: null,      // Transparent background
+            backgroundColor: '#f0f0f0', // Match the container background
             scale: 2,                   // Higher quality for print
-            logging: false,             // Disable console logging for cleaner output
+            logging: true,              // Enable logging for debugging
             imageTimeout: 15000,        // Timeout for loading images (15 seconds)
             removeContainer: true,      // Remove cloned container after rendering
             // Explicitly set the capture dimensions to match the visible container
             width: visibleContainerWidth,
             height: visibleContainerHeight,
-            windowWidth: visibleContainerWidth,
-            windowHeight: visibleContainerHeight,
+            x: 0,
+            y: 0,
+            scrollX: 0,
+            scrollY: 0,
             onclone: function(clonedDoc) {
-                // Additional processing on the cloned document if needed
-                // Ensure visibility of elements in the clone
+                console.log('onclone called, visibleContainerWidth:', visibleContainerWidth, 'visibleContainerHeight:', visibleContainerHeight);
+                
+                // CRITICAL: Fix the entire document layout to prevent flex recalculations
+                var clonedBody = clonedDoc.body;
+                
+                // Reset body layout to prevent flex affecting container height
+                clonedBody.style.display = 'block';
+                clonedBody.style.height = visibleContainerHeight + 'px';
+                clonedBody.style.minHeight = visibleContainerHeight + 'px';
+                clonedBody.style.maxHeight = visibleContainerHeight + 'px';
+                clonedBody.style.overflow = 'hidden';
+                clonedBody.style.margin = '0';
+                clonedBody.style.padding = '0';
+                
+                // Hide the button bar in the clone
+                var clonedButtonBar = clonedDoc.getElementById('button-bar');
+                if (clonedButtonBar) {
+                    clonedButtonBar.style.display = 'none';
+                }
+                
                 var clonedContainer = clonedDoc.getElementById('canvas-container');
                 if (clonedContainer) {
                     clonedContainer.style.visibility = 'visible';
                     
-                    // Fix the container dimensions to match the original visible dimensions
-                    // This is critical because html2canvas may calculate different dimensions
+                    // CRITICAL: Set exact pixel dimensions and remove flex behavior
                     clonedContainer.style.width = visibleContainerWidth + 'px';
                     clonedContainer.style.height = visibleContainerHeight + 'px';
+                    clonedContainer.style.minHeight = visibleContainerHeight + 'px';
+                    clonedContainer.style.maxHeight = visibleContainerHeight + 'px';
                     clonedContainer.style.flex = 'none';
+                    clonedContainer.style.flexGrow = '0';
+                    clonedContainer.style.flexShrink = '0';
                     clonedContainer.style.overflow = 'hidden';
                     clonedContainer.style.position = 'relative';
+                    clonedContainer.style.top = '0';
+                    clonedContainer.style.left = '0';
                     
-                    // Also fix the text layer dimensions
+                    console.log('Cloned container dimensions set to:', visibleContainerWidth, 'x', visibleContainerHeight);
+                    
+                    // Fix the text layer dimensions to match exactly
                     var clonedTextLayer = clonedContainer.querySelector('#text-layer');
                     if (clonedTextLayer) {
                         clonedTextLayer.style.width = visibleContainerWidth + 'px';
                         clonedTextLayer.style.height = visibleContainerHeight + 'px';
+                        clonedTextLayer.style.position = 'absolute';
+                        clonedTextLayer.style.top = '0';
+                        clonedTextLayer.style.left = '0';
                     }
                     
-                    // Also fix the background image dimensions
+                    // Fix the background image to have exact dimensions
                     var clonedBackground = clonedContainer.querySelector('#background');
                     if (clonedBackground) {
-                        clonedBackground.style.width = '100%';
-                        clonedBackground.style.height = '100%';
+                        clonedBackground.style.width = visibleContainerWidth + 'px';
+                        clonedBackground.style.height = visibleContainerHeight + 'px';
                         clonedBackground.style.objectFit = 'contain';
+                        clonedBackground.style.position = 'relative';
+                        clonedBackground.style.top = '0';
+                        clonedBackground.style.left = '0';
                     }
                     
                     // Fix text box positions in the cloned document
-                    // Use the original pixel positions since we've fixed the container size
+                    // Use percentage-based positioning to scale correctly
                     var clonedTextBoxContainers = clonedContainer.querySelectorAll('.text-box-container');
                     clonedTextBoxContainers.forEach(function(clonedBox, index) {
                         if (textBoxPositions[index]) {
-                            // Apply the original pixel positions
-                            clonedBox.style.left = textBoxPositions[index].originalLeft + 'px';
-                            clonedBox.style.top = textBoxPositions[index].originalTop + 'px';
+                            // Scale the positions based on the new container dimensions
+                            var scaledLeft = textBoxPositions[index].leftPercent * visibleContainerWidth;
+                            var scaledTop = textBoxPositions[index].topPercent * visibleContainerHeight;
+                            
+                            console.log('Setting text box', index, 'to scaled position:', scaledLeft, scaledTop);
+                            
+                            clonedBox.style.left = scaledLeft + 'px';
+                            clonedBox.style.top = scaledTop + 'px';
+                            clonedBox.style.position = 'absolute';
                         }
                     });
                 }
