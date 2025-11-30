@@ -470,6 +470,26 @@ document.addEventListener('DOMContentLoaded', function() {
             container.classList.add('printing');
         });
 
+        // Store the computed positions of text boxes relative to the canvas container
+        // This is needed because html2canvas may render positions incorrectly
+        var containerRect = canvasContainer.getBoundingClientRect();
+        var containerWidth = containerRect.width;
+        var containerHeight = containerRect.height;
+        
+        // Debug: Log original container dimensions
+        console.log('Original container rect:', containerRect);
+        console.log('Container offsetWidth:', canvasContainer.offsetWidth, 'offsetHeight:', canvasContainer.offsetHeight);
+        
+        var textBoxPositions = [];
+        textBoxContainers.forEach(function(container, index) {
+            var boxRect = container.getBoundingClientRect();
+            textBoxPositions.push({
+                index: index,
+                left: boxRect.left - containerRect.left,
+                top: boxRect.top - containerRect.top
+            });
+        });
+
         // Helper function to restore button state
         function restoreButtonState() {
             printBtn.disabled = false;
@@ -575,7 +595,7 @@ document.addEventListener('DOMContentLoaded', function() {
             foreignObjectRendering: false, // Disable foreignObject for better compatibility
             backgroundColor: null,      // Transparent background
             scale: 2,                   // Higher quality for print
-            logging: false,             // Disable console logging for cleaner output
+            logging: true,              // Enable console logging for debugging
             imageTimeout: 15000,        // Timeout for loading images (15 seconds)
             removeContainer: true,      // Remove cloned container after rendering
             onclone: function(clonedDoc) {
@@ -584,6 +604,28 @@ document.addEventListener('DOMContentLoaded', function() {
                 var clonedContainer = clonedDoc.getElementById('canvas-container');
                 if (clonedContainer) {
                     clonedContainer.style.visibility = 'visible';
+                    
+                    // Fix the container dimensions to match the original
+                    // This is necessary because flexbox layout may compute differently in the clone
+                    clonedContainer.style.width = containerWidth + 'px';
+                    clonedContainer.style.height = containerHeight + 'px';
+                    clonedContainer.style.flex = 'none';
+                    
+                    // Debug: Log dimensions and positions
+                    console.log('Container dimensions:', containerWidth, 'x', containerHeight);
+                    console.log('Text box positions to apply:', textBoxPositions);
+                    
+                    // Fix text box positions in the cloned document
+                    // This ensures text boxes appear at correct positions in the screenshot
+                    var clonedTextBoxContainers = clonedContainer.querySelectorAll('.text-box-container');
+                    console.log('Found cloned text boxes:', clonedTextBoxContainers.length);
+                    clonedTextBoxContainers.forEach(function(clonedBox, index) {
+                        if (textBoxPositions[index]) {
+                            console.log('Applying position to box', index, ':', textBoxPositions[index]);
+                            clonedBox.style.left = textBoxPositions[index].left + 'px';
+                            clonedBox.style.top = textBoxPositions[index].top + 'px';
+                        }
+                    });
                 }
             }
         }).then(function(canvas) {
