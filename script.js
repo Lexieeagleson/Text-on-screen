@@ -486,11 +486,6 @@ document.addEventListener('DOMContentLoaded', function() {
         var visibleContainerWidth = viewportWidth;
         var visibleContainerHeight = viewportHeight - buttonBarHeight;
         
-        console.log('Viewport:', viewportWidth, 'x', viewportHeight);
-        console.log('Button bar height:', buttonBarHeight);
-        console.log('Visible container:', visibleContainerWidth, 'x', visibleContainerHeight);
-        console.log('Container rect:', containerRect.width, 'x', containerRect.height);
-        
         // Get the rendered image bounds (accounting for object-fit: contain)
         var imageBounds = getRenderedImageBounds();
         
@@ -519,8 +514,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 originalTop: topInContainer,
                 actualContainerHeight: actualContainerHeight
             });
-            
-            console.log('Text box', index, 'position:', leftInContainer, topInContainer, 'percent:', leftPercent, topPercent);
         });
 
         // CRITICAL: Fix the container dimensions BEFORE html2canvas captures
@@ -654,7 +647,7 @@ document.addEventListener('DOMContentLoaded', function() {
             foreignObjectRendering: false, // Disable foreignObject for better compatibility
             backgroundColor: '#f0f0f0', // Match the container background
             scale: 2,                   // Higher quality for print
-            logging: true,              // Enable logging for debugging
+            logging: false,             // Disable logging for cleaner output
             imageTimeout: 15000,        // Timeout for loading images (15 seconds)
             removeContainer: true,      // Remove cloned container after rendering
             // Explicitly set the capture dimensions to match the visible container
@@ -665,8 +658,6 @@ document.addEventListener('DOMContentLoaded', function() {
             scrollX: 0,
             scrollY: 0,
             onclone: function(clonedDoc) {
-                console.log('onclone called, visibleContainerWidth:', visibleContainerWidth, 'visibleContainerHeight:', visibleContainerHeight);
-                
                 // CRITICAL: Fix the entire document layout to prevent flex recalculations
                 var clonedBody = clonedDoc.body;
                 
@@ -702,8 +693,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     clonedContainer.style.top = '0';
                     clonedContainer.style.left = '0';
                     
-                    console.log('Cloned container dimensions set to:', visibleContainerWidth, 'x', visibleContainerHeight);
-                    
                     // Fix the text layer dimensions to match exactly
                     var clonedTextLayer = clonedContainer.querySelector('#text-layer');
                     if (clonedTextLayer) {
@@ -733,8 +722,6 @@ document.addEventListener('DOMContentLoaded', function() {
                             // Scale the positions based on the new container dimensions
                             var scaledLeft = textBoxPositions[index].leftPercent * visibleContainerWidth;
                             var scaledTop = textBoxPositions[index].topPercent * visibleContainerHeight;
-                            
-                            console.log('Setting text box', index, 'to scaled position:', scaledLeft, scaledTop);
                             
                             clonedBox.style.left = scaledLeft + 'px';
                             clonedBox.style.top = scaledTop + 'px';
