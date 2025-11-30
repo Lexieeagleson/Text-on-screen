@@ -450,6 +450,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Print button - capture screenshot using html2canvas and print it
     printBtn.addEventListener('click', function() {
+        // Disable button during print process to prevent multiple clicks
+        printBtn.disabled = true;
+        printBtn.textContent = 'Preparing...';
+
         // Deselect any selected text box to hide UI elements
         if (selectedTextBox) {
             const container = selectedTextBox.closest('.text-box-container');
@@ -466,48 +470,169 @@ document.addEventListener('DOMContentLoaded', function() {
             container.classList.add('printing');
         });
 
-        // Use html2canvas to capture the canvas-container
-        html2canvas(canvasContainer, {
-            useCORS: true,
-            backgroundColor: null,
-            scale: 2 // Higher quality for print
-        }).then(function(canvas) {
-            // Remove printing class
+        // Helper function to restore button state
+        function restoreButtonState() {
+            printBtn.disabled = false;
+            printBtn.textContent = 'Print Page';
+        }
+
+        // Helper function to remove printing class from all containers
+        function removePrintingClass() {
             textBoxContainers.forEach(function(container) {
                 container.classList.remove('printing');
             });
+        }
 
-            // Create a print container with the screenshot
-            const printContainer = document.createElement('div');
+        // Helper function to trigger print with fallback (prints current page without screenshot)
+        function triggerFallbackPrint() {
+            removePrintingClass();
+            restoreButtonState();
+            
+            // Inform user about fallback
+            var userConfirmed = confirm('Screenshot capture failed. Would you like to print the page directly instead? Note: Some elements may not appear as expected.');
+            if (userConfirmed) {
+                window.print();
+            }
+        }
+
+        // Helper function to create and display print container with screenshot
+        function displayPrintContainer(canvas) {
+            var printContainer = document.createElement('div');
             printContainer.id = 'print-screenshot-container';
             
-            const img = document.createElement('img');
-            img.src = canvas.toDataURL('image/png');
+            var img = document.createElement('img');
+            
+            try {
+                img.src = canvas.toDataURL('image/png');
+            } catch (dataUrlError) {
+                console.error('Error converting canvas to data URL:', dataUrlError);
+                throw new Error('Failed to convert screenshot to image format');
+            }
+            
+            // Add load event to ensure image is ready before printing
+            img.onload = function() {
+                // Hide original content during print
+                canvasContainer.style.visibility = 'hidden';
+
+                // Cleanup function after print
+                function cleanup() {
+                    if (printContainer && printContainer.parentNode) {
+                        printContainer.remove();
+                    }
+                    canvasContainer.style.visibility = 'visible';
+                    restoreButtonState();
+                    window.removeEventListener('afterprint', cleanup);
+                }
+
+                window.addEventListener('afterprint', cleanup);
+
+                // Fallback cleanup timeout for browsers that don't support afterprint
+                // or if the print dialog is cancelled without triggering afterprint
+                setTimeout(function() {
+                    if (printContainer && printContainer.parentNode) {
+                        cleanup();
+                    }
+                }, 60000); // 60 second timeout
+
+                // Trigger print dialog
+                try {
+                    window.print();
+                } catch (printError) {
+                    console.error('Error triggering print dialog:', printError);
+                    cleanup();
+                    alert('Unable to open print dialog. Please try using your browser\'s print function (Ctrl+P or Cmd+P).');
+                }
+            };
+
+            img.onerror = function() {
+                console.error('Error loading screenshot image');
+                restoreButtonState();
+                triggerFallbackPrint();
+            };
             
             printContainer.appendChild(img);
             document.body.appendChild(printContainer);
+        }
 
-            // Hide original content during print
-            canvasContainer.style.visibility = 'hidden';
+        // Check if html2canvas is available
+        if (typeof html2canvas !== 'function') {
+            console.error('html2canvas library not loaded');
+            triggerFallbackPrint();
+            return;
+        }
 
-            // Cleanup function after print
-            function cleanup() {
-                printContainer.remove();
-                canvasContainer.style.visibility = 'visible';
-                window.removeEventListener('afterprint', cleanup);
+        // Set a timeout for the screenshot capture
+        var captureTimeout = setTimeout(function() {
+            console.error('Screenshot capture timed out');
+            removePrintingClass();
+            triggerFallbackPrint();
+        }, 30000); // 30 second timeout
+
+        // Use html2canvas to capture the canvas-container with comprehensive CORS settings
+        html2canvas(canvasContainer, {
+            useCORS: true,              // Attempt to load images using CORS
+            allowTaint: false,          // Disable tainted canvas for security (prevents cross-origin data exposure)
+            foreignObjectRendering: false, // Disable foreignObject for better compatibility
+            backgroundColor: null,      // Transparent background
+            scale: 2,                   // Higher quality for print
+            logging: false,             // Disable console logging for cleaner output
+            imageTimeout: 15000,        // Timeout for loading images (15 seconds)
+            removeContainer: true,      // Remove cloned container after rendering
+            onclone: function(clonedDoc) {
+                // Additional processing on the cloned document if needed
+                // Ensure visibility of elements in the clone
+                var clonedContainer = clonedDoc.getElementById('canvas-container');
+                if (clonedContainer) {
+                    clonedContainer.style.visibility = 'visible';
+                }
+            }
+        }).then(function(canvas) {
+            clearTimeout(captureTimeout);
+            
+            // Remove printing class
+            removePrintingClass();
+
+            // Validate canvas
+            if (!canvas || canvas.width === 0 || canvas.height === 0) {
+                console.error('Invalid canvas generated');
+                triggerFallbackPrint();
+                return;
             }
 
-            window.addEventListener('afterprint', cleanup);
-
-            // Trigger print dialog
-            window.print();
+            try {
+                displayPrintContainer(canvas);
+            } catch (displayError) {
+                console.error('Error displaying print container:', displayError);
+                triggerFallbackPrint();
+            }
         }).catch(function(error) {
+            clearTimeout(captureTimeout);
             console.error('Error capturing screenshot:', error);
+            
             // Remove printing class on error
-            textBoxContainers.forEach(function(container) {
-                container.classList.remove('printing');
-            });
-            alert('Failed to capture screenshot for printing. This may be due to cross-origin image restrictions or browser compatibility issues. Please try refreshing the page or using a different browser.');
+            removePrintingClass();
+            
+            // Provide specific error messages based on error type
+            var errorMessage = 'Screenshot capture failed. ';
+            
+            if (error && error.message) {
+                if (error.message.includes('cross-origin') || error.message.includes('CORS') || error.message.includes('tainted')) {
+                    errorMessage += 'This may be due to cross-origin image restrictions. ';
+                } else if (error.message.includes('timeout')) {
+                    errorMessage += 'The operation timed out. ';
+                } else if (error.message.includes('security')) {
+                    errorMessage += 'A security restriction prevented the operation. ';
+                }
+            }
+            
+            errorMessage += 'Would you like to print the page directly instead?';
+            
+            var userConfirmed = confirm(errorMessage);
+            if (userConfirmed) {
+                window.print();
+            }
+            
+            restoreButtonState();
         });
     });
 
