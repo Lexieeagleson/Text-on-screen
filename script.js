@@ -571,7 +571,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Use html2canvas to capture the canvas-container with comprehensive CORS settings
         html2canvas(canvasContainer, {
             useCORS: true,              // Attempt to load images using CORS
-            allowTaint: true,           // Allow tainted canvas (cross-origin images)
+            allowTaint: false,          // Disable tainted canvas for security (prevents cross-origin data exposure)
             foreignObjectRendering: false, // Disable foreignObject for better compatibility
             backgroundColor: null,      // Transparent background
             scale: 2,                   // Higher quality for print
