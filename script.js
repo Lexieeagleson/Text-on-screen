@@ -470,23 +470,34 @@ document.addEventListener('DOMContentLoaded', function() {
             container.classList.add('printing');
         });
 
-        // Store the computed positions of text boxes relative to the canvas container
-        // This is needed because html2canvas may render positions incorrectly
+        // Get the actual visible container dimensions from getBoundingClientRect
+        // This gives us the viewport-relative dimensions, not the full scrollable height
         var containerRect = canvasContainer.getBoundingClientRect();
-        var containerWidth = containerRect.width;
-        var containerHeight = containerRect.height;
+        var visibleContainerWidth = containerRect.width;
+        var visibleContainerHeight = containerRect.height;
         
-        // Debug: Log original container dimensions
-        console.log('Original container rect:', containerRect);
-        console.log('Container offsetWidth:', canvasContainer.offsetWidth, 'offsetHeight:', canvasContainer.offsetHeight);
+        // Get the rendered image bounds (accounting for object-fit: contain)
+        var imageBounds = getRenderedImageBounds();
         
+        // Store text box positions as percentages relative to the rendered image
+        // This allows proper scaling when the container size changes during capture
         var textBoxPositions = [];
         textBoxContainers.forEach(function(container, index) {
             var boxRect = container.getBoundingClientRect();
+            // Calculate position relative to container
+            var leftInContainer = boxRect.left - containerRect.left;
+            var topInContainer = boxRect.top - containerRect.top;
+            
+            // Convert to percentage of container dimensions for scaling
+            var leftPercent = leftInContainer / visibleContainerWidth;
+            var topPercent = topInContainer / visibleContainerHeight;
+            
             textBoxPositions.push({
                 index: index,
-                left: boxRect.left - containerRect.left,
-                top: boxRect.top - containerRect.top
+                leftPercent: leftPercent,
+                topPercent: topPercent,
+                originalLeft: leftInContainer,
+                originalTop: topInContainer
             });
         });
 
@@ -595,7 +606,7 @@ document.addEventListener('DOMContentLoaded', function() {
             foreignObjectRendering: false, // Disable foreignObject for better compatibility
             backgroundColor: null,      // Transparent background
             scale: 2,                   // Higher quality for print
-            logging: true,              // Enable console logging for debugging
+            logging: false,             // Disable console logging for cleaner output
             imageTimeout: 15000,        // Timeout for loading images (15 seconds)
             removeContainer: true,      // Remove cloned container after rendering
             onclone: function(clonedDoc) {
@@ -605,25 +616,29 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (clonedContainer) {
                     clonedContainer.style.visibility = 'visible';
                     
-                    // Fix the container dimensions to match the original
-                    // This is necessary because flexbox layout may compute differently in the clone
-                    clonedContainer.style.width = containerWidth + 'px';
-                    clonedContainer.style.height = containerHeight + 'px';
+                    // Fix the container dimensions to match the original visible dimensions
+                    // This is critical because html2canvas may calculate different dimensions
+                    clonedContainer.style.width = visibleContainerWidth + 'px';
+                    clonedContainer.style.height = visibleContainerHeight + 'px';
                     clonedContainer.style.flex = 'none';
+                    clonedContainer.style.overflow = 'hidden';
                     
-                    // Debug: Log dimensions and positions
-                    console.log('Container dimensions:', containerWidth, 'x', containerHeight);
-                    console.log('Text box positions to apply:', textBoxPositions);
+                    // Also fix the background image dimensions
+                    var clonedBackground = clonedContainer.querySelector('#background');
+                    if (clonedBackground) {
+                        clonedBackground.style.width = '100%';
+                        clonedBackground.style.height = '100%';
+                        clonedBackground.style.objectFit = 'contain';
+                    }
                     
                     // Fix text box positions in the cloned document
-                    // This ensures text boxes appear at correct positions in the screenshot
+                    // Use percentage-based positioning to scale correctly
                     var clonedTextBoxContainers = clonedContainer.querySelectorAll('.text-box-container');
-                    console.log('Found cloned text boxes:', clonedTextBoxContainers.length);
                     clonedTextBoxContainers.forEach(function(clonedBox, index) {
                         if (textBoxPositions[index]) {
-                            console.log('Applying position to box', index, ':', textBoxPositions[index]);
-                            clonedBox.style.left = textBoxPositions[index].left + 'px';
-                            clonedBox.style.top = textBoxPositions[index].top + 'px';
+                            // Apply the original pixel positions since we've fixed the container size
+                            clonedBox.style.left = textBoxPositions[index].originalLeft + 'px';
+                            clonedBox.style.top = textBoxPositions[index].originalTop + 'px';
                         }
                     });
                 }
