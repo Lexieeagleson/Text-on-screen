@@ -492,8 +492,8 @@ document.addEventListener('DOMContentLoaded', function() {
         // Get the actual container height (which may be larger than viewport due to image)
         var actualContainerHeight = containerRect.height;
         
-        // Store text box positions relative to the container
-        // We'll scale these positions when applying to the clone
+        // Store text box positions relative to the rendered image
+        // This accounts for object-fit: contain which may offset the image within the container
         var textBoxPositions = [];
         textBoxContainers.forEach(function(container, index) {
             var boxRect = container.getBoundingClientRect();
@@ -501,18 +501,21 @@ document.addEventListener('DOMContentLoaded', function() {
             var leftInContainer = boxRect.left - containerRect.left;
             var topInContainer = boxRect.top - containerRect.top;
             
-            // Convert to percentage of ACTUAL container dimensions
-            // This allows us to scale correctly when the container size changes
-            var leftPercent = leftInContainer / visibleContainerWidth;
-            var topPercent = topInContainer / actualContainerHeight;
+            // Calculate position relative to the rendered image (not the container)
+            // This is critical for correct positioning when the container aspect ratio changes
+            var leftRelativeToImage = leftInContainer - imageBounds.offsetX;
+            var topRelativeToImage = topInContainer - imageBounds.offsetY;
+            
+            // Convert to percentage of rendered image dimensions
+            var leftPercent = leftRelativeToImage / imageBounds.width;
+            var topPercent = topRelativeToImage / imageBounds.height;
             
             textBoxPositions.push({
                 index: index,
                 leftPercent: leftPercent,
                 topPercent: topPercent,
                 originalLeft: leftInContainer,
-                originalTop: topInContainer,
-                actualContainerHeight: actualContainerHeight
+                originalTop: topInContainer
             });
         });
 
@@ -714,14 +717,42 @@ document.addEventListener('DOMContentLoaded', function() {
                         clonedBackground.style.left = '0';
                     }
                     
+                    // Calculate the new image bounds in the clone
+                    // Since we're using the same image with object-fit: contain,
+                    // we need to calculate where the image will render in the new container
+                    var background = document.getElementById('background');
+                    var imgNaturalWidth = background.naturalWidth;
+                    var imgNaturalHeight = background.naturalHeight;
+                    var imgAspect = imgNaturalWidth / imgNaturalHeight;
+                    var cloneAspect = visibleContainerWidth / visibleContainerHeight;
+                    
+                    var newImageWidth, newImageHeight, newOffsetX, newOffsetY;
+                    if (imgAspect > cloneAspect) {
+                        // Image is wider - width fills container
+                        newImageWidth = visibleContainerWidth;
+                        newImageHeight = visibleContainerWidth / imgAspect;
+                        newOffsetX = 0;
+                        newOffsetY = (visibleContainerHeight - newImageHeight) / 2;
+                    } else {
+                        // Image is taller - height fills container
+                        newImageHeight = visibleContainerHeight;
+                        newImageWidth = visibleContainerHeight * imgAspect;
+                        newOffsetX = (visibleContainerWidth - newImageWidth) / 2;
+                        newOffsetY = 0;
+                    }
+                    
                     // Fix text box positions in the cloned document
-                    // Use percentage-based positioning to scale correctly
+                    // Use the percentage positions relative to the rendered image
                     var clonedTextBoxContainers = clonedContainer.querySelectorAll('.text-box-container');
                     clonedTextBoxContainers.forEach(function(clonedBox, index) {
                         if (textBoxPositions[index]) {
-                            // Scale the positions based on the new container dimensions
-                            var scaledLeft = textBoxPositions[index].leftPercent * visibleContainerWidth;
-                            var scaledTop = textBoxPositions[index].topPercent * visibleContainerHeight;
+                            // Convert percentage positions back to pixels relative to the new image bounds
+                            var positionOnImage_Left = textBoxPositions[index].leftPercent * newImageWidth;
+                            var positionOnImage_Top = textBoxPositions[index].topPercent * newImageHeight;
+                            
+                            // Add the new image offset to get the position in the container
+                            var scaledLeft = newOffsetX + positionOnImage_Left;
+                            var scaledTop = newOffsetY + positionOnImage_Top;
                             
                             clonedBox.style.left = scaledLeft + 'px';
                             clonedBox.style.top = scaledTop + 'px';
