@@ -336,30 +336,18 @@ document.addEventListener('DOMContentLoaded', function() {
     function getRenderedImageBounds() {
         const background = document.getElementById('background');
         const containerRect = canvasContainer.getBoundingClientRect();
+        const imageRect = background.getBoundingClientRect();
         
-        const containerWidth = containerRect.width;
-        const containerHeight = containerRect.height;
-        const imgNaturalWidth = background.naturalWidth;
-        const imgNaturalHeight = background.naturalHeight;
+        // Calculate the image's position relative to the container
+        const offsetX = imageRect.left - containerRect.left;
+        const offsetY = imageRect.top - containerRect.top;
         
-        const containerAspect = containerWidth / containerHeight;
-        const imgAspect = imgNaturalWidth / imgNaturalHeight;
-        
-        let renderedWidth, renderedHeight, offsetX, offsetY;
-        
-        if (imgAspect > containerAspect) {
-            renderedWidth = containerWidth;
-            renderedHeight = containerWidth / imgAspect;
-            offsetX = 0;
-            offsetY = (containerHeight - renderedHeight) / 2;
-        } else {
-            renderedHeight = containerHeight;
-            renderedWidth = containerHeight * imgAspect;
-            offsetX = (containerWidth - renderedWidth) / 2;
-            offsetY = 0;
-        }
-        
-        return { offsetX, offsetY, width: renderedWidth, height: renderedHeight };
+        return { 
+            offsetX, 
+            offsetY, 
+            width: imageRect.width, 
+            height: imageRect.height 
+        };
     }
 
     // Print button - capture screenshot and open in new tab for printing
@@ -561,6 +549,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     clonedContainer.style.flex = 'none';
                     clonedContainer.style.overflow = 'hidden';
                     clonedContainer.style.position = 'relative';
+                    clonedContainer.style.display = 'flex';
+                    clonedContainer.style.alignItems = 'center';
+                    clonedContainer.style.justifyContent = 'center';
                     
                     const clonedTextLayer = clonedContainer.querySelector('#text-layer');
                     if (clonedTextLayer) {
@@ -569,13 +560,6 @@ document.addEventListener('DOMContentLoaded', function() {
                         clonedTextLayer.style.position = 'absolute';
                         clonedTextLayer.style.top = '0';
                         clonedTextLayer.style.left = '0';
-                    }
-                    
-                    const clonedBackground = clonedContainer.querySelector('#background');
-                    if (clonedBackground) {
-                        clonedBackground.style.width = visibleContainerWidth + 'px';
-                        clonedBackground.style.height = visibleContainerHeight + 'px';
-                        clonedBackground.style.objectFit = 'contain';
                     }
                     
                     // Calculate new image bounds for cloned container
@@ -596,7 +580,17 @@ document.addEventListener('DOMContentLoaded', function() {
                         newOffsetY = 0;
                     }
                     
-                    // Reposition text boxes
+                    const clonedBackground = clonedContainer.querySelector('#background');
+                    if (clonedBackground) {
+                        // Set the image to its actual rendered size (maintaining aspect ratio)
+                        clonedBackground.style.width = newImageWidth + 'px';
+                        clonedBackground.style.height = newImageHeight + 'px';
+                        clonedBackground.style.maxWidth = 'none';
+                        clonedBackground.style.maxHeight = 'none';
+                        clonedBackground.style.objectFit = 'contain';
+                    }
+                    
+                    // Reposition text boxes relative to the new image position
                     const clonedTextBoxContainers = clonedContainer.querySelectorAll('.text-box-container');
                     clonedTextBoxContainers.forEach(function(clonedBox, index) {
                         if (textBoxPositions[index]) {
