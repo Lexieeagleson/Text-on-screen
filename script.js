@@ -1,46 +1,37 @@
 document.addEventListener('DOMContentLoaded', function() {
+    // DOM elements
     const textLayer = document.getElementById('text-layer');
     const canvasContainer = document.getElementById('canvas-container');
     const printBtn = document.getElementById('print-btn');
     const resetBtn = document.getElementById('reset-btn');
 
-    let activeTextBox = null;
-    let selectedTextBox = null;
-    let isDragging = false;
-    let isResizing = false;
-    let resizeDirection = null;
-    let dragOffsetX = 0;
-    let dragOffsetY = 0;
-    let resizeStartX = 0;
-    let resizeStartY = 0;
-    let resizeStartWidth = 0;
-    let resizeStartHeight = 0;
-    let resizeStartLeft = 0;
-    let resizeStartTop = 0;
-    let activeResizeContainer = null;
+    // State management
+    const state = {
+        activeTextBox: null,
+        selectedTextBox: null,
+        isDragging: false,
+        isResizing: false,
+        resizeDirection: null,
+        dragOffset: { x: 0, y: 0 },
+        resizeStart: { x: 0, y: 0, width: 0, height: 0, left: 0, top: 0 },
+        activeResizeContainer: null
+    };
+
+    // Constants
+    const DEFAULT_TEXT_BOX_WIDTH = 100;
+    const MIN_TEXT_BOX_WIDTH = 50;
+    const CAPTURE_TIMEOUT_MS = 30000;
+    const PRINT_TAB_CLOSE_DELAY_MS = 1000;
 
     // Click on canvas to create a new text box or deselect
     canvasContainer.addEventListener('click', function(e) {
-        // Ignore clicks on existing text boxes, containers (for clicks in padding area), delete buttons, drag handles, or resize handles
-        if (e.target.classList.contains('text-box') || 
-            e.target.classList.contains('text-box-container') ||
-            e.target.classList.contains('delete-btn') ||
-            e.target.classList.contains('drag-handle') ||
-            e.target.classList.contains('resize-handle') ||
-            e.target.classList.contains('dimension-controls') ||
-            e.target.closest('.dimension-controls')) {
+        // Ignore clicks on interactive elements
+        if (isInteractiveElement(e.target)) {
             return;
         }
 
         // Deselect any selected text box when clicking on canvas
-        if (selectedTextBox) {
-            const container = selectedTextBox.closest('.text-box-container');
-            if (container) {
-                container.classList.remove('selected');
-            }
-            selectedTextBox.blur();
-            selectedTextBox = null;
-        }
+        deselectTextBox();
 
         const rect = canvasContainer.getBoundingClientRect();
         const x = e.clientX - rect.left;
@@ -48,6 +39,27 @@ document.addEventListener('DOMContentLoaded', function() {
 
         createTextBox(x, y);
     });
+
+    // Check if element is interactive (should not trigger new text box)
+    function isInteractiveElement(target) {
+        return target.classList.contains('text-box') || 
+               target.classList.contains('text-box-container') ||
+               target.classList.contains('delete-btn') ||
+               target.classList.contains('drag-handle') ||
+               target.classList.contains('resize-handle');
+    }
+
+    // Deselect current text box
+    function deselectTextBox() {
+        if (state.selectedTextBox) {
+            const container = state.selectedTextBox.closest('.text-box-container');
+            if (container) {
+                container.classList.remove('selected');
+            }
+            state.selectedTextBox.blur();
+            state.selectedTextBox = null;
+        }
+    }
 
     function createTextBox(x, y) {
         // Create container for text box and delete button
@@ -59,36 +71,100 @@ document.addEventListener('DOMContentLoaded', function() {
         const textBox = document.createElement('textarea');
         textBox.className = 'text-box';
         textBox.rows = 1;
+        textBox.style.width = DEFAULT_TEXT_BOX_WIDTH + 'px';
 
         // Create drag handle
+        const dragHandle = createDragHandle(container, textBox);
+
+        // Create delete button
+        const deleteBtn = createDeleteButton(container, textBox);
+
+        // Create resize handles (only east and west for width adjustment)
+        createResizeHandles(container, textBox);
+
+        // Setup text box event listeners
+        setupTextBoxEvents(container, textBox);
+
+        container.appendChild(dragHandle);
+        container.appendChild(textBox);
+        container.appendChild(deleteBtn);
+        textLayer.appendChild(container);
+        textBox.focus();
+        state.selectedTextBox = textBox;
+    }
+
+    // Create drag handle element
+    function createDragHandle(container, textBox) {
         const dragHandle = document.createElement('button');
         dragHandle.className = 'drag-handle';
-        dragHandle.innerHTML = '&#9776;'; // Trigram symbol (☰) used as drag handle icon
+        dragHandle.innerHTML = '&#9776;';
         dragHandle.title = 'Drag to move';
         dragHandle.setAttribute('aria-label', 'Drag handle - click and drag to move text box');
 
-        // Create delete button
+        function startDragFromHandle(clientX, clientY) {
+            deselectOtherTextBox(textBox);
+            state.isDragging = true;
+            state.activeTextBox = textBox;
+            state.selectedTextBox = textBox;
+            container.classList.add('selected');
+            const boxRect = container.getBoundingClientRect();
+            state.dragOffset.x = clientX - boxRect.left;
+            state.dragOffset.y = clientY - boxRect.top;
+        }
+
+        dragHandle.addEventListener('mousedown', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            startDragFromHandle(e.clientX, e.clientY);
+        });
+
+        dragHandle.addEventListener('touchstart', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const touch = e.touches[0];
+            startDragFromHandle(touch.clientX, touch.clientY);
+        });
+
+        return dragHandle;
+    }
+
+    // Create delete button element
+    function createDeleteButton(container, textBox) {
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'delete-btn';
         deleteBtn.innerHTML = '&times;';
         deleteBtn.title = 'Delete text box';
 
-        // Create resize handles (only east and west for width adjustment)
-        const resizeDirections = ['e', 'w'];
-        resizeDirections.forEach(function(dir) {
+        deleteBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            if (confirm('Are you sure you want to delete this text box?')) {
+                if (state.selectedTextBox === textBox) {
+                    state.selectedTextBox = null;
+                }
+                if (state.activeTextBox === textBox) {
+                    state.activeTextBox = null;
+                }
+                container.remove();
+            }
+        });
+
+        return deleteBtn;
+    }
+
+    // Create resize handles
+    function createResizeHandles(container, textBox) {
+        ['e', 'w'].forEach(function(dir) {
             const handle = document.createElement('div');
             handle.className = 'resize-handle ' + dir;
             handle.dataset.direction = dir;
             handle.title = 'Drag to resize';
             
-            // Mouse events for resize
             handle.addEventListener('mousedown', function(e) {
                 e.preventDefault();
                 e.stopPropagation();
                 startResize(e.clientX, e.clientY, dir, container, textBox);
             });
             
-            // Touch events for resize
             handle.addEventListener('touchstart', function(e) {
                 e.preventDefault();
                 e.stopPropagation();
@@ -98,204 +174,74 @@ document.addEventListener('DOMContentLoaded', function() {
             
             container.appendChild(handle);
         });
+    }
 
-        // Create dimension controls (width only - height auto-adjusts to content)
-        const dimensionControls = document.createElement('div');
-        dimensionControls.className = 'dimension-controls';
-        
-        const widthLabel = document.createElement('label');
-        widthLabel.textContent = 'W:';
-        const widthInput = document.createElement('input');
-        widthInput.type = 'number';
-        widthInput.min = '50';
-        widthInput.max = '1000';
-        widthInput.value = '100';
-        widthInput.title = 'Width in pixels';
-        widthInput.setAttribute('aria-label', 'Text box width');
-        
-        dimensionControls.appendChild(widthLabel);
-        dimensionControls.appendChild(widthInput);
-
-        // Handle dimension input changes
-        widthInput.addEventListener('input', function(e) {
-            e.stopPropagation();
-            const newWidth = Math.max(50, Math.min(1000, parseInt(this.value) || 50));
-            textBox.style.width = newWidth + 'px';
-            // Trigger height auto-adjustment
-            adjustTextBoxHeight(textBox);
-        });
-        
-        widthInput.addEventListener('change', function() {
-            const newWidth = Math.max(50, Math.min(1000, parseInt(this.value) || 50));
-            this.value = newWidth;
-            textBox.style.width = newWidth + 'px';
-            // Trigger height auto-adjustment
-            adjustTextBoxHeight(textBox);
-        });
-
-        // Prevent clicks on dimension controls from propagating
-        dimensionControls.addEventListener('click', function(e) {
-            e.stopPropagation();
-        });
-        
-        dimensionControls.addEventListener('mousedown', function(e) {
-            e.stopPropagation();
-        });
-
-        // Delete button click handler
-        deleteBtn.addEventListener('click', function(e) {
-            e.stopPropagation();
-            if (confirm('Are you sure you want to delete this text box?')) {
-                if (selectedTextBox === textBox) {
-                    selectedTextBox = null;
-                }
-                if (activeTextBox === textBox) {
-                    activeTextBox = null;
-                }
-                container.remove();
-            }
-        });
-
-        // Helper function to start drag operation from drag handle
-        function startDragFromHandle(clientX, clientY) {
-            // Deselect any other text box
-            if (selectedTextBox && selectedTextBox !== textBox) {
-                const oldContainer = selectedTextBox.closest('.text-box-container');
-                if (oldContainer) {
-                    oldContainer.classList.remove('selected');
-                }
-                selectedTextBox.blur();
-            }
-            
-            isDragging = true;
-            activeTextBox = textBox;
-            selectedTextBox = textBox;
-            container.classList.add('selected');
-            const boxRect = container.getBoundingClientRect();
-            dragOffsetX = clientX - boxRect.left;
-            dragOffsetY = clientY - boxRect.top;
-        }
-
-        // Drag handle - mouse events
-        dragHandle.addEventListener('mousedown', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            startDragFromHandle(e.clientX, e.clientY);
-        });
-
-        // Drag handle - touch events for mobile support
-        dragHandle.addEventListener('touchstart', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            const touch = e.touches[0];
-            startDragFromHandle(touch.clientX, touch.clientY);
-        });
-
-        // Auto-resize textarea height as content changes
+    // Setup text box event listeners
+    function setupTextBoxEvents(container, textBox) {
         textBox.addEventListener('input', function() {
             adjustTextBoxHeight(this);
-            // Update dimension inputs
-            updateDimensionInputs(container);
         });
 
-        // Handle drag start - can drag when selected (not editing)
         textBox.addEventListener('mousedown', function(e) {
-            // Select this text box
-            if (selectedTextBox && selectedTextBox !== this) {
-                const oldContainer = selectedTextBox.closest('.text-box-container');
-                if (oldContainer) {
-                    oldContainer.classList.remove('selected');
-                }
-                selectedTextBox.blur();
-            }
+            deselectOtherTextBox(this);
             
-            // If not in edit mode (not focused), allow dragging
             if (document.activeElement !== this) {
                 e.preventDefault();
-                isDragging = true;
-                activeTextBox = this;
-                selectedTextBox = this;
+                state.isDragging = true;
+                state.activeTextBox = this;
+                state.selectedTextBox = this;
                 container.classList.add('selected');
                 const boxRect = container.getBoundingClientRect();
-                dragOffsetX = e.clientX - boxRect.left;
-                dragOffsetY = e.clientY - boxRect.top;
+                state.dragOffset.x = e.clientX - boxRect.left;
+                state.dragOffset.y = e.clientY - boxRect.top;
             }
         });
 
-        // Single click to select for moving
         textBox.addEventListener('click', function(e) {
             e.stopPropagation();
-            if (!isDragging && !isResizing) {
-                // Select but don't focus (for moving)
-                if (selectedTextBox && selectedTextBox !== this) {
-                    const oldContainer = selectedTextBox.closest('.text-box-container');
-                    if (oldContainer) {
-                        oldContainer.classList.remove('selected');
-                    }
-                    selectedTextBox.blur();
-                }
-                selectedTextBox = this;
+            if (!state.isDragging && !state.isResizing) {
+                deselectOtherTextBox(this);
+                state.selectedTextBox = this;
                 container.classList.add('selected');
-                updateDimensionInputs(container);
             }
         });
 
-        // Double-click to enter edit mode
         textBox.addEventListener('dblclick', function(e) {
             e.stopPropagation();
             container.classList.remove('selected');
             this.focus();
-            selectedTextBox = this;
+            state.selectedTextBox = this;
         });
+    }
 
-        container.appendChild(dragHandle);
-        container.appendChild(textBox);
-        container.appendChild(deleteBtn);
-        container.appendChild(dimensionControls);
-        textLayer.appendChild(container);
-        textBox.focus();
-        selectedTextBox = textBox;
-        
-        // Initialize dimension inputs after textbox is in the DOM
-        setTimeout(function() {
-            updateDimensionInputs(container);
-        }, 0);
+    // Deselect other text box if different from current
+    function deselectOtherTextBox(currentTextBox) {
+        if (state.selectedTextBox && state.selectedTextBox !== currentTextBox) {
+            const oldContainer = state.selectedTextBox.closest('.text-box-container');
+            if (oldContainer) {
+                oldContainer.classList.remove('selected');
+            }
+            state.selectedTextBox.blur();
+        }
     }
 
     // Start resize operation
     function startResize(clientX, clientY, direction, container, textBox) {
-        isResizing = true;
-        resizeDirection = direction;
-        activeResizeContainer = container;
-        activeTextBox = textBox;
+        state.isResizing = true;
+        state.resizeDirection = direction;
+        state.activeResizeContainer = container;
+        state.activeTextBox = textBox;
         
-        resizeStartX = clientX;
-        resizeStartY = clientY;
-        resizeStartWidth = textBox.offsetWidth;
-        resizeStartHeight = textBox.offsetHeight;
-        resizeStartLeft = parseFloat(container.style.left) || 0;
-        resizeStartTop = parseFloat(container.style.top) || 0;
+        state.resizeStart.x = clientX;
+        state.resizeStart.y = clientY;
+        state.resizeStart.width = textBox.offsetWidth;
+        state.resizeStart.height = textBox.offsetHeight;
+        state.resizeStart.left = parseFloat(container.style.left) || 0;
+        state.resizeStart.top = parseFloat(container.style.top) || 0;
         
-        // Select this text box
-        if (selectedTextBox && selectedTextBox !== textBox) {
-            const oldContainer = selectedTextBox.closest('.text-box-container');
-            if (oldContainer) {
-                oldContainer.classList.remove('selected');
-            }
-            selectedTextBox.blur();
-        }
-        selectedTextBox = textBox;
+        deselectOtherTextBox(textBox);
+        state.selectedTextBox = textBox;
         container.classList.add('selected');
-    }
-
-    // Update dimension inputs based on current text box size
-    function updateDimensionInputs(container) {
-        const textBox = container.querySelector('.text-box');
-        const widthInput = container.querySelector('.dimension-controls input[aria-label="Text box width"]');
-        
-        if (textBox && widthInput) {
-            widthInput.value = Math.round(textBox.offsetWidth);
-        }
     }
 
     // Adjust text box height to fit content
@@ -306,117 +252,87 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Handle drag movement
     document.addEventListener('mousemove', function(e) {
-        if (isResizing && activeResizeContainer && activeTextBox) {
+        if (state.isResizing && state.activeResizeContainer && state.activeTextBox) {
             handleResize(e.clientX, e.clientY);
-        } else if (isDragging && activeTextBox) {
-            const container = activeTextBox.closest('.text-box-container');
-            if (!container) {
-                console.warn('Text box container not found during drag operation');
-                return;
-            }
-            
-            const containerRect = canvasContainer.getBoundingClientRect();
-            let newX = e.clientX - containerRect.left - dragOffsetX;
-            let newY = e.clientY - containerRect.top - dragOffsetY;
-
-            // Keep within bounds
-            newX = Math.max(0, Math.min(newX, containerRect.width - container.offsetWidth));
-            newY = Math.max(0, Math.min(newY, containerRect.height - container.offsetHeight));
-
-            container.style.left = newX + 'px';
-            container.style.top = newY + 'px';
+        } else if (state.isDragging && state.activeTextBox) {
+            handleDrag(e.clientX, e.clientY);
         }
     });
 
     // Handle touch move for mobile drag support
     document.addEventListener('touchmove', function(e) {
-        if (isResizing && activeResizeContainer && activeTextBox) {
+        if (state.isResizing && state.activeResizeContainer && state.activeTextBox) {
             const touch = e.touches[0];
             handleResize(touch.clientX, touch.clientY);
-        } else if (isDragging && activeTextBox) {
-            const container = activeTextBox.closest('.text-box-container');
-            if (!container) {
-                console.warn('Text box container not found during drag operation');
-                return;
-            }
-            
+        } else if (state.isDragging && state.activeTextBox) {
             const touch = e.touches[0];
-            const containerRect = canvasContainer.getBoundingClientRect();
-            let newX = touch.clientX - containerRect.left - dragOffsetX;
-            let newY = touch.clientY - containerRect.top - dragOffsetY;
-
-            // Keep within bounds
-            newX = Math.max(0, Math.min(newX, containerRect.width - container.offsetWidth));
-            newY = Math.max(0, Math.min(newY, containerRect.height - container.offsetHeight));
-
-            container.style.left = newX + 'px';
-            container.style.top = newY + 'px';
+            handleDrag(touch.clientX, touch.clientY);
         }
     }, { passive: false });
 
+    // Handle drag operation
+    function handleDrag(clientX, clientY) {
+        const container = state.activeTextBox.closest('.text-box-container');
+        if (!container) {
+            return;
+        }
+        
+        const containerRect = canvasContainer.getBoundingClientRect();
+        let newX = clientX - containerRect.left - state.dragOffset.x;
+        let newY = clientY - containerRect.top - state.dragOffset.y;
+
+        // Keep within bounds
+        newX = Math.max(0, Math.min(newX, containerRect.width - container.offsetWidth));
+        newY = Math.max(0, Math.min(newY, containerRect.height - container.offsetHeight));
+
+        container.style.left = newX + 'px';
+        container.style.top = newY + 'px';
+    }
+
     // Handle resize operation (width only - height auto-adjusts)
     function handleResize(clientX, clientY) {
-        const deltaX = clientX - resizeStartX;
+        const deltaX = clientX - state.resizeStart.x;
         
-        let newWidth = resizeStartWidth;
-        let newLeft = resizeStartLeft;
-        
-        const minWidth = 50;
+        let newWidth = state.resizeStart.width;
+        let newLeft = state.resizeStart.left;
         
         // Calculate new width based on resize direction (only e and w)
-        switch (resizeDirection) {
-            case 'e': // East - resize right
-                newWidth = Math.max(minWidth, resizeStartWidth + deltaX);
-                break;
-            case 'w': // West - resize left
-                newWidth = Math.max(minWidth, resizeStartWidth - deltaX);
-                if (newWidth !== minWidth) {
-                    newLeft = resizeStartLeft + deltaX;
-                }
-                break;
+        if (state.resizeDirection === 'e') {
+            newWidth = Math.max(MIN_TEXT_BOX_WIDTH, state.resizeStart.width + deltaX);
+        } else if (state.resizeDirection === 'w') {
+            newWidth = Math.max(MIN_TEXT_BOX_WIDTH, state.resizeStart.width - deltaX);
+            if (newWidth !== MIN_TEXT_BOX_WIDTH) {
+                newLeft = state.resizeStart.left + deltaX;
+            }
         }
         
         // Apply new width
-        activeTextBox.style.width = newWidth + 'px';
-        activeResizeContainer.style.left = newLeft + 'px';
+        state.activeTextBox.style.width = newWidth + 'px';
+        state.activeResizeContainer.style.left = newLeft + 'px';
         
         // Auto-adjust height to fit content
-        adjustTextBoxHeight(activeTextBox);
-        
-        // Update dimension inputs
-        updateDimensionInputs(activeResizeContainer);
+        adjustTextBoxHeight(state.activeTextBox);
+    }
+
+    // Reset drag/resize state
+    function resetDragResizeState() {
+        if (state.isDragging) {
+            state.isDragging = false;
+            state.activeTextBox = null;
+        }
+        if (state.isResizing) {
+            state.isResizing = false;
+            state.resizeDirection = null;
+            state.activeResizeContainer = null;
+            state.activeTextBox = null;
+        }
     }
 
     // Handle drag end
-    document.addEventListener('mouseup', function() {
-        if (isDragging) {
-            isDragging = false;
-            activeTextBox = null;
-        }
-        if (isResizing) {
-            isResizing = false;
-            resizeDirection = null;
-            activeResizeContainer = null;
-            activeTextBox = null;
-        }
-    });
-
-    // Handle touch end for mobile drag support
-    document.addEventListener('touchend', function() {
-        if (isDragging) {
-            isDragging = false;
-            activeTextBox = null;
-        }
-        if (isResizing) {
-            isResizing = false;
-            resizeDirection = null;
-            activeResizeContainer = null;
-            activeTextBox = null;
-        }
-    });
+    document.addEventListener('mouseup', resetDragResizeState);
+    document.addEventListener('touchend', resetDragResizeState);
 
     // Helper function to calculate the actual rendered image bounds
-    // This accounts for object-fit: contain which centers the image
     function getRenderedImageBounds() {
         const background = document.getElementById('background');
         const containerRect = canvasContainer.getBoundingClientRect();
@@ -432,13 +348,11 @@ document.addEventListener('DOMContentLoaded', function() {
         let renderedWidth, renderedHeight, offsetX, offsetY;
         
         if (imgAspect > containerAspect) {
-            // Image is wider - width fills container
             renderedWidth = containerWidth;
             renderedHeight = containerWidth / imgAspect;
             offsetX = 0;
             offsetY = (containerHeight - renderedHeight) / 2;
         } else {
-            // Image is taller - height fills container
             renderedHeight = containerHeight;
             renderedWidth = containerHeight * imgAspect;
             offsetX = (containerWidth - renderedWidth) / 2;
@@ -448,21 +362,13 @@ document.addEventListener('DOMContentLoaded', function() {
         return { offsetX, offsetY, width: renderedWidth, height: renderedHeight };
     }
 
-    // Print button - capture screenshot using html2canvas and print it
+    // Print button - capture screenshot and open in new tab for printing
     printBtn.addEventListener('click', function() {
-        // Disable button during print process to prevent multiple clicks
         printBtn.disabled = true;
         printBtn.textContent = 'Preparing...';
 
         // Deselect any selected text box to hide UI elements
-        if (selectedTextBox) {
-            const container = selectedTextBox.closest('.text-box-container');
-            if (container) {
-                container.classList.remove('selected');
-            }
-            selectedTextBox.blur();
-            selectedTextBox = null;
-        }
+        deselectTextBox();
 
         // Hide UI elements before capture
         const textBoxContainers = textLayer.querySelectorAll('.text-box-container');
@@ -470,190 +376,164 @@ document.addEventListener('DOMContentLoaded', function() {
             container.classList.add('printing');
         });
 
-        // Get the button bar height to calculate the actual visible container height
-        var buttonBar = document.getElementById('button-bar');
-        var buttonBarHeight = buttonBar ? buttonBar.offsetHeight : 0;
-        
-        // Calculate the actual visible container dimensions
-        // The container height should be viewport height minus button bar
-        var viewportHeight = window.innerHeight;
-        var viewportWidth = window.innerWidth;
-        
-        // Get the container rect for position calculations
-        var containerRect = canvasContainer.getBoundingClientRect();
-        
-        // Use viewport-based dimensions for the visible area
-        var visibleContainerWidth = viewportWidth;
-        var visibleContainerHeight = viewportHeight - buttonBarHeight;
-        
-        // Get the rendered image bounds (accounting for object-fit: contain)
-        var imageBounds = getRenderedImageBounds();
-        
-        // Get the actual container height (which may be larger than viewport due to image)
-        var actualContainerHeight = containerRect.height;
-        
+        // Calculate dimensions
+        const buttonBar = document.getElementById('button-bar');
+        const buttonBarHeight = buttonBar ? buttonBar.offsetHeight : 0;
+        const viewportHeight = window.innerHeight;
+        const viewportWidth = window.innerWidth;
+        const containerRect = canvasContainer.getBoundingClientRect();
+        const visibleContainerWidth = viewportWidth;
+        const visibleContainerHeight = viewportHeight - buttonBarHeight;
+        const imageBounds = getRenderedImageBounds();
+
         // Store text box positions relative to the rendered image
-        // This accounts for object-fit: contain which may offset the image within the container
-        var textBoxPositions = [];
-        textBoxContainers.forEach(function(container, index) {
-            var boxRect = container.getBoundingClientRect();
-            // Calculate position relative to container
-            var leftInContainer = boxRect.left - containerRect.left;
-            var topInContainer = boxRect.top - containerRect.top;
+        const textBoxPositions = Array.from(textBoxContainers).map(function(container) {
+            const boxRect = container.getBoundingClientRect();
+            const leftInContainer = boxRect.left - containerRect.left;
+            const topInContainer = boxRect.top - containerRect.top;
+            const leftRelativeToImage = leftInContainer - imageBounds.offsetX;
+            const topRelativeToImage = topInContainer - imageBounds.offsetY;
             
-            // Calculate position relative to the rendered image (not the container)
-            // This is critical for correct positioning when the container aspect ratio changes
-            var leftRelativeToImage = leftInContainer - imageBounds.offsetX;
-            var topRelativeToImage = topInContainer - imageBounds.offsetY;
-            
-            // Convert to percentage of rendered image dimensions
-            var leftPercent = leftRelativeToImage / imageBounds.width;
-            var topPercent = topRelativeToImage / imageBounds.height;
-            
-            textBoxPositions.push({
-                index: index,
-                leftPercent: leftPercent,
-                topPercent: topPercent,
-                originalLeft: leftInContainer,
-                originalTop: topInContainer
-            });
+            return {
+                leftPercent: leftRelativeToImage / imageBounds.width,
+                topPercent: topRelativeToImage / imageBounds.height
+            };
         });
 
-        // CRITICAL: Fix the container dimensions BEFORE html2canvas captures
-        // This ensures the clone has the same dimensions as the original
-        var originalContainerStyle = {
+        // Save original container style
+        const originalContainerStyle = {
             width: canvasContainer.style.width,
             height: canvasContainer.style.height,
             flex: canvasContainer.style.flex,
-            position: canvasContainer.style.position,
             overflow: canvasContainer.style.overflow
         };
         
-        // Set explicit dimensions on the container to match the visible viewport
+        // Set explicit dimensions for capture
         canvasContainer.style.width = visibleContainerWidth + 'px';
         canvasContainer.style.height = visibleContainerHeight + 'px';
         canvasContainer.style.flex = 'none';
         canvasContainer.style.overflow = 'hidden';
 
-        // Helper function to restore container style
         function restoreContainerStyle() {
             canvasContainer.style.width = originalContainerStyle.width;
             canvasContainer.style.height = originalContainerStyle.height;
             canvasContainer.style.flex = originalContainerStyle.flex;
-            canvasContainer.style.position = originalContainerStyle.position;
             canvasContainer.style.overflow = originalContainerStyle.overflow;
         }
 
-        // Helper function to restore button state
         function restoreButtonState() {
             printBtn.disabled = false;
             printBtn.textContent = 'Print Page';
         }
 
-        // Helper function to remove printing class from all containers
         function removePrintingClass() {
             textBoxContainers.forEach(function(container) {
                 container.classList.remove('printing');
             });
         }
 
-        // Helper function to trigger print with fallback (prints current page without screenshot)
-        function triggerFallbackPrint() {
+        function cleanup() {
             removePrintingClass();
             restoreContainerStyle();
             restoreButtonState();
-            
-            // Inform user about fallback
-            var userConfirmed = confirm('Screenshot capture failed. Would you like to print the page directly instead? Note: Some elements may not appear as expected.');
-            if (userConfirmed) {
+        }
+
+        function triggerFallbackPrint() {
+            cleanup();
+            if (confirm('Screenshot capture failed. Would you like to print the page directly instead?')) {
                 window.print();
             }
         }
 
-        // Helper function to create and display print container with screenshot
-        function displayPrintContainer(canvas) {
-            var printContainer = document.createElement('div');
-            printContainer.id = 'print-screenshot-container';
-            
-            var img = document.createElement('img');
-            
+        // Open new tab with screenshot and print dialog
+        function openPrintTab(canvas) {
+            let imageDataUrl;
             try {
-                img.src = canvas.toDataURL('image/png');
-            } catch (dataUrlError) {
-                console.error('Error converting canvas to data URL:', dataUrlError);
-                throw new Error('Failed to convert screenshot to image format');
+                imageDataUrl = canvas.toDataURL('image/png');
+            } catch (err) {
+                throw new Error('Failed to convert screenshot to image');
             }
-            
-            // Add load event to ensure image is ready before printing
-            img.onload = function() {
-                // Hide original content during print
-                canvasContainer.style.visibility = 'hidden';
 
-                // Cleanup function after print
-                function cleanup() {
-                    if (printContainer && printContainer.parentNode) {
-                        printContainer.remove();
-                    }
-                    canvasContainer.style.visibility = 'visible';
-                    restoreButtonState();
-                    window.removeEventListener('afterprint', cleanup);
-                }
+            // Create new tab with print page
+            const printWindow = window.open('', '_blank');
+            if (!printWindow) {
+                throw new Error('Popup blocked. Please allow popups to print.');
+            }
 
-                window.addEventListener('afterprint', cleanup);
-
-                // Fallback cleanup timeout for browsers that don't support afterprint
-                // or if the print dialog is cancelled without triggering afterprint
-                setTimeout(function() {
-                    if (printContainer && printContainer.parentNode) {
-                        cleanup();
-                    }
-                }, 60000); // 60 second timeout
-
-                // Trigger print dialog
-                try {
-                    window.print();
-                } catch (printError) {
-                    console.error('Error triggering print dialog:', printError);
-                    cleanup();
-                    alert('Unable to open print dialog. Please try using your browser\'s print function (Ctrl+P or Cmd+P).');
-                }
-            };
-
-            img.onerror = function() {
-                console.error('Error loading screenshot image');
-                restoreButtonState();
-                triggerFallbackPrint();
-            };
-            
-            printContainer.appendChild(img);
-            document.body.appendChild(printContainer);
+            // Write the print page HTML
+            printWindow.document.write(`
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Print Preview</title>
+                    <style>
+                        * { margin: 0; padding: 0; box-sizing: border-box; }
+                        body { 
+                            display: flex; 
+                            justify-content: center; 
+                            align-items: center; 
+                            min-height: 100vh; 
+                            background: white; 
+                        }
+                        img { 
+                            max-width: 100%; 
+                            max-height: 100vh; 
+                            object-fit: contain; 
+                        }
+                        @media print {
+                            @page { size: auto; margin: 0.5cm; }
+                            body { min-height: auto; }
+                            img { max-height: none; }
+                        }
+                    </style>
+                </head>
+                <body>
+                    <img src="${imageDataUrl}" alt="Print Preview">
+                    <script>
+                        // Wait for image to load, then print and close
+                        document.querySelector('img').onload = function() {
+                            setTimeout(function() {
+                                window.print();
+                                // Close tab after print dialog closes
+                                window.onafterprint = function() {
+                                    window.close();
+                                };
+                                // Fallback: close after delay if afterprint doesn't fire
+                                setTimeout(function() {
+                                    window.close();
+                                }, ${PRINT_TAB_CLOSE_DELAY_MS});
+                            }, 100);
+                        };
+                    <\/script>
+                </body>
+                </html>
+            `);
+            printWindow.document.close();
+            cleanup();
         }
 
         // Check if html2canvas is available
         if (typeof html2canvas !== 'function') {
-            console.error('html2canvas library not loaded');
             triggerFallbackPrint();
             return;
         }
 
-        // Set a timeout for the screenshot capture
-        var captureTimeout = setTimeout(function() {
-            console.error('Screenshot capture timed out');
-            removePrintingClass();
+        // Capture timeout
+        const captureTimeout = setTimeout(function() {
+            cleanup();
             triggerFallbackPrint();
-        }, 30000); // 30 second timeout
+        }, CAPTURE_TIMEOUT_MS);
 
-        // Use html2canvas to capture the canvas-container with comprehensive CORS settings
+        // Capture screenshot with html2canvas
         html2canvas(canvasContainer, {
-            useCORS: true,              // Attempt to load images using CORS
-            allowTaint: false,          // Disable tainted canvas for security (prevents cross-origin data exposure)
-            foreignObjectRendering: false, // Disable foreignObject for better compatibility
-            backgroundColor: '#f0f0f0', // Match the container background
-            scale: 2,                   // Higher quality for print
-            logging: false,             // Disable logging for cleaner output
-            imageTimeout: 15000,        // Timeout for loading images (15 seconds)
-            removeContainer: true,      // Remove cloned container after rendering
-            // Explicitly set the capture dimensions to match the visible container
+            useCORS: true,
+            allowTaint: false,
+            foreignObjectRendering: false,
+            backgroundColor: '#f0f0f0',
+            scale: 2,
+            logging: false,
+            imageTimeout: 15000,
+            removeContainer: true,
             width: visibleContainerWidth,
             height: visibleContainerHeight,
             x: 0,
@@ -661,43 +541,28 @@ document.addEventListener('DOMContentLoaded', function() {
             scrollX: 0,
             scrollY: 0,
             onclone: function(clonedDoc) {
-                // CRITICAL: Fix the entire document layout to prevent flex recalculations
-                var clonedBody = clonedDoc.body;
-                
-                // Reset body layout to prevent flex affecting container height
+                const clonedBody = clonedDoc.body;
                 clonedBody.style.display = 'block';
                 clonedBody.style.height = visibleContainerHeight + 'px';
-                clonedBody.style.minHeight = visibleContainerHeight + 'px';
-                clonedBody.style.maxHeight = visibleContainerHeight + 'px';
                 clonedBody.style.overflow = 'hidden';
                 clonedBody.style.margin = '0';
                 clonedBody.style.padding = '0';
                 
-                // Hide the button bar in the clone
-                var clonedButtonBar = clonedDoc.getElementById('button-bar');
+                const clonedButtonBar = clonedDoc.getElementById('button-bar');
                 if (clonedButtonBar) {
                     clonedButtonBar.style.display = 'none';
                 }
                 
-                var clonedContainer = clonedDoc.getElementById('canvas-container');
+                const clonedContainer = clonedDoc.getElementById('canvas-container');
                 if (clonedContainer) {
                     clonedContainer.style.visibility = 'visible';
-                    
-                    // CRITICAL: Set exact pixel dimensions and remove flex behavior
                     clonedContainer.style.width = visibleContainerWidth + 'px';
                     clonedContainer.style.height = visibleContainerHeight + 'px';
-                    clonedContainer.style.minHeight = visibleContainerHeight + 'px';
-                    clonedContainer.style.maxHeight = visibleContainerHeight + 'px';
                     clonedContainer.style.flex = 'none';
-                    clonedContainer.style.flexGrow = '0';
-                    clonedContainer.style.flexShrink = '0';
                     clonedContainer.style.overflow = 'hidden';
                     clonedContainer.style.position = 'relative';
-                    clonedContainer.style.top = '0';
-                    clonedContainer.style.left = '0';
                     
-                    // Fix the text layer dimensions to match exactly
-                    var clonedTextLayer = clonedContainer.querySelector('#text-layer');
+                    const clonedTextLayer = clonedContainer.querySelector('#text-layer');
                     if (clonedTextLayer) {
                         clonedTextLayer.style.width = visibleContainerWidth + 'px';
                         clonedTextLayer.style.height = visibleContainerHeight + 'px';
@@ -706,54 +571,37 @@ document.addEventListener('DOMContentLoaded', function() {
                         clonedTextLayer.style.left = '0';
                     }
                     
-                    // Fix the background image to have exact dimensions
-                    var clonedBackground = clonedContainer.querySelector('#background');
+                    const clonedBackground = clonedContainer.querySelector('#background');
                     if (clonedBackground) {
                         clonedBackground.style.width = visibleContainerWidth + 'px';
                         clonedBackground.style.height = visibleContainerHeight + 'px';
                         clonedBackground.style.objectFit = 'contain';
-                        clonedBackground.style.position = 'relative';
-                        clonedBackground.style.top = '0';
-                        clonedBackground.style.left = '0';
                     }
                     
-                    // Calculate the new image bounds in the clone
-                    // Since we're using the same image with object-fit: contain,
-                    // we need to calculate where the image will render in the new container
-                    var background = document.getElementById('background');
-                    var imgNaturalWidth = background.naturalWidth;
-                    var imgNaturalHeight = background.naturalHeight;
-                    var imgAspect = imgNaturalWidth / imgNaturalHeight;
-                    var cloneAspect = visibleContainerWidth / visibleContainerHeight;
+                    // Calculate new image bounds for cloned container
+                    const background = document.getElementById('background');
+                    const imgAspect = background.naturalWidth / background.naturalHeight;
+                    const cloneAspect = visibleContainerWidth / visibleContainerHeight;
                     
-                    var newImageWidth, newImageHeight, newOffsetX, newOffsetY;
+                    let newImageWidth, newImageHeight, newOffsetX, newOffsetY;
                     if (imgAspect > cloneAspect) {
-                        // Image is wider - width fills container
                         newImageWidth = visibleContainerWidth;
                         newImageHeight = visibleContainerWidth / imgAspect;
                         newOffsetX = 0;
                         newOffsetY = (visibleContainerHeight - newImageHeight) / 2;
                     } else {
-                        // Image is taller - height fills container
                         newImageHeight = visibleContainerHeight;
                         newImageWidth = visibleContainerHeight * imgAspect;
                         newOffsetX = (visibleContainerWidth - newImageWidth) / 2;
                         newOffsetY = 0;
                     }
                     
-                    // Fix text box positions in the cloned document
-                    // Use the percentage positions relative to the rendered image
-                    var clonedTextBoxContainers = clonedContainer.querySelectorAll('.text-box-container');
+                    // Reposition text boxes
+                    const clonedTextBoxContainers = clonedContainer.querySelectorAll('.text-box-container');
                     clonedTextBoxContainers.forEach(function(clonedBox, index) {
                         if (textBoxPositions[index]) {
-                            // Convert percentage positions back to pixels relative to the new image bounds
-                            var positionOnImage_Left = textBoxPositions[index].leftPercent * newImageWidth;
-                            var positionOnImage_Top = textBoxPositions[index].topPercent * newImageHeight;
-                            
-                            // Add the new image offset to get the position in the container
-                            var scaledLeft = newOffsetX + positionOnImage_Left;
-                            var scaledTop = newOffsetY + positionOnImage_Top;
-                            
+                            const scaledLeft = newOffsetX + textBoxPositions[index].leftPercent * newImageWidth;
+                            const scaledTop = newOffsetY + textBoxPositions[index].topPercent * newImageHeight;
                             clonedBox.style.left = scaledLeft + 'px';
                             clonedBox.style.top = scaledTop + 'px';
                             clonedBox.style.position = 'absolute';
@@ -763,62 +611,41 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }).then(function(canvas) {
             clearTimeout(captureTimeout);
-            
-            // Restore container style after capture
             restoreContainerStyle();
-            
-            // Remove printing class
             removePrintingClass();
 
-            // Validate canvas
             if (!canvas || canvas.width === 0 || canvas.height === 0) {
-                console.error('Invalid canvas generated');
                 triggerFallbackPrint();
                 return;
             }
 
             try {
-                displayPrintContainer(canvas);
-            } catch (displayError) {
-                console.error('Error displaying print container:', displayError);
-                triggerFallbackPrint();
+                openPrintTab(canvas);
+            } catch (err) {
+                alert(err.message);
+                restoreButtonState();
             }
         }).catch(function(error) {
             clearTimeout(captureTimeout);
-            console.error('Error capturing screenshot:', error);
+            cleanup();
             
-            // Restore container style on error
-            restoreContainerStyle();
-            
-            // Remove printing class on error
-            removePrintingClass();
-            
-            // Provide specific error messages based on error type
-            var errorMessage = 'Screenshot capture failed. ';
-            
+            let errorMessage = 'Screenshot capture failed. ';
             if (error && error.message) {
-                if (error.message.includes('cross-origin') || error.message.includes('CORS') || error.message.includes('tainted')) {
-                    errorMessage += 'This may be due to cross-origin image restrictions. ';
-                } else if (error.message.includes('timeout')) {
-                    errorMessage += 'The operation timed out. ';
-                } else if (error.message.includes('security')) {
-                    errorMessage += 'A security restriction prevented the operation. ';
+                if (error.message.includes('cross-origin') || error.message.includes('CORS')) {
+                    errorMessage += 'Cross-origin image restriction. ';
                 }
             }
             
-            errorMessage += 'Would you like to print the page directly instead?';
-            
-            var userConfirmed = confirm(errorMessage);
-            if (userConfirmed) {
+            if (confirm(errorMessage + 'Print page directly instead?')) {
                 window.print();
             }
-            
-            restoreButtonState();
         });
     });
 
     // Reset button
     resetBtn.addEventListener('click', function() {
-        textLayer.innerHTML = '';
+        if (confirm('Are you sure you want to reset and clear all text boxes?')) {
+            textLayer.innerHTML = '';
+        }
     });
 });

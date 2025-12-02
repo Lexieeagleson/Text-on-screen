@@ -131,55 +131,10 @@ body {
     cursor: w-resize;
 }
 
-/* Dimension input controls */
-.dimension-controls {
-    position: absolute;
-    bottom: -50px;
-    left: 0;
-    display: none;
-    gap: 5px;
-    align-items: center;
-    background-color: rgba(255, 255, 255, 0.95);
-    padding: 3px 6px;
-    border-radius: 4px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-    font-size: 11px;
-    z-index: 20;
-    white-space: nowrap;
-}
-
-.text-box-container.selected .dimension-controls {
-    display: flex;
-}
-
-.dimension-controls label {
-    color: #333;
-    font-weight: 500;
-}
-
-.dimension-controls input {
-    width: 45px;
-    padding: 2px 4px;
-    border: 1px solid #ccc;
-    border-radius: 3px;
-    font-size: 11px;
-    text-align: center;
-}
-
-.dimension-controls input:focus {
-    outline: none;
-    border-color: #007bff;
-}
-
-.dimension-controls span {
-    color: #666;
-}
-
 /* Styles for printing - hide UI elements during screenshot capture */
 .text-box-container.printing .delete-btn,
 .text-box-container.printing .drag-handle,
-.text-box-container.printing .resize-handle,
-.text-box-container.printing .dimension-controls {
+.text-box-container.printing .resize-handle {
     display: none !important;
 }
 
@@ -233,6 +188,7 @@ body {
 
 .text-box {
     position: relative;
+    width: 100px;
     min-width: 50px;
     min-height: 24px;
     background: transparent;
