@@ -587,7 +587,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         clonedBackground.style.height = newImageHeight + 'px';
                         clonedBackground.style.maxWidth = 'none';
                         clonedBackground.style.maxHeight = 'none';
-                        clonedBackground.style.objectFit = 'fill';
+                        clonedBackground.style.objectFit = 'contain';
                     }
                     
                     // Reposition text boxes relative to the new image position
