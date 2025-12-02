@@ -20,7 +20,8 @@ document.addEventListener('DOMContentLoaded', function() {
     // Constants
     const DEFAULT_TEXT_BOX_WIDTH = 100;
     const MIN_TEXT_BOX_WIDTH = 50;
-    const MAX_TEXT_BOX_WIDTH = 1000;
+    const CAPTURE_TIMEOUT_MS = 30000;
+    const PRINT_TAB_CLOSE_DELAY_MS = 1000;
 
     // Click on canvas to create a new text box or deselect
     canvasContainer.addEventListener('click', function(e) {
@@ -500,7 +501,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 // Fallback: close after delay if afterprint doesn't fire
                                 setTimeout(function() {
                                     window.close();
-                                }, 1000);
+                                }, ${PRINT_TAB_CLOSE_DELAY_MS});
                             }, 100);
                         };
                     <\/script>
@@ -521,7 +522,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const captureTimeout = setTimeout(function() {
             cleanup();
             triggerFallbackPrint();
-        }, 30000);
+        }, CAPTURE_TIMEOUT_MS);
 
         // Capture screenshot with html2canvas
         html2canvas(canvasContainer, {
